@@ -269,7 +269,8 @@ def run_ga(config: dict) -> dict:
                             "loss_rate": eval_results[best_idx]["loss_rate"],
                             "mean_turns": best_turns,
                             "num_games": games_per_eval * 2,
-                            "opponent": opponent_label}
+                            "opponent": opponent_label,
+                            "avg_final_deck": eval_results[best_idx].get("avg_final_deck")}
                 gen_dir = os.path.join(best_model_dir, f"gen_{gen:03d}")
                 save_best_model(best_strat, vs_stats, output_dir=gen_dir)
                 # Also save as "latest" for easy access

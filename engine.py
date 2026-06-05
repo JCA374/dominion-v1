@@ -220,10 +220,14 @@ def play_game_2p(strategy1: Strategy, strategy2: Strategy, rng_seed: int,
         for player, strategy in zip(players, strategies):
             # Check game end before each player's turn
             if is_game_over(player, turn_cap=40):
+                def _all_cards(p):
+                    return p.deck + p.hand + p.discard + p.play_area
                 return {
                     "vp1": count_vp(p1),
                     "vp2": count_vp(p2),
                     "turns": round_num - 1,
+                    "deck1": _all_cards(p1),
+                    "deck2": _all_cards(p2),
                 }
 
             player.turn = round_num  # per-player turn (for phase transitions)

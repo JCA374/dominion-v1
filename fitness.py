@@ -50,6 +50,7 @@ def evaluate_vs_opponent(strategy: Strategy, seed_list: list[int],
     wins = 0
     ties = 0
     total_turns = 0
+    deck_counts: dict[str, int] = {}
     for s in seed_list:
         # Game 1: strategy goes first
         r1 = play_game_2p(strategy, opp, s, kingdom)
@@ -58,6 +59,8 @@ def evaluate_vs_opponent(strategy: Strategy, seed_list: list[int],
             wins += 1
         elif r1["vp1"] == r1["vp2"]:
             ties += 1
+        for card in r1["deck1"]:
+            deck_counts[card] = deck_counts.get(card, 0) + 1
 
         # Game 2: strategy goes second
         r2 = play_game_2p(opp, strategy, s, kingdom)
@@ -66,13 +69,18 @@ def evaluate_vs_opponent(strategy: Strategy, seed_list: list[int],
             wins += 1
         elif r2["vp2"] == r2["vp1"]:
             ties += 1
+        for card in r2["deck2"]:
+            deck_counts[card] = deck_counts.get(card, 0) + 1
 
     n = len(seed_list) * 2  # twice as many games
+    avg_deck = {card: round(count / n, 1) for card, count in
+                sorted(deck_counts.items(), key=lambda x: -x[1])}
     return {
         "win_rate": wins / n,
         "tie_rate": ties / n,
         "loss_rate": (n - wins - ties) / n,
         "mean_turns": total_turns / n,
+        "avg_final_deck": avg_deck,
     }
 
 

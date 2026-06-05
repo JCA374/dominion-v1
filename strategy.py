@@ -249,6 +249,18 @@ def summarize(strategy: Strategy, vs_bm: dict) -> str:
     else:
         lines.append("  waits until very late to buy victory cards (lean deck).")
 
+    # --- Average final deck ---
+    avg_deck = vs_bm.get("avg_final_deck")
+    if avg_deck:
+        lines.append("")
+        lines.append("  Average Final Deck")
+        lines.append(f"  {'─' * 40}")
+        total = sum(avg_deck.values())
+        for card, count in avg_deck.items():
+            bar = "█" * int(round(count))
+            lines.append(f"  {card:>12s}  {count:4.1f}  {bar}")
+        lines.append(f"  {'Total':>12s}  {total:4.1f}")
+
     lines.append("")
     lines.append("=" * 60)
     return "\n".join(lines)
@@ -263,6 +275,8 @@ def save_best_model(strategy: Strategy, vs_bm: dict,
 
     # Save strategy as JSON (machine-readable, can be loaded back)
     data = asdict(strategy)
+    if "avg_final_deck" in vs_bm:
+        data["avg_final_deck"] = vs_bm["avg_final_deck"]
     with open(os.path.join(output_dir, "strategy.json"), "w") as f:
         json.dump(data, f, indent=2)
 
