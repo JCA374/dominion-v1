@@ -4,3 +4,4 @@ __pycache__/
 best_model/gen_*/
 evolution_log.csv
 *.png
+!best_model/buy_heatmap.png
