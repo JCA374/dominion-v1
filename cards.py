@@ -44,12 +44,15 @@ THRONE_ROOM = Card("Throne Room", CardType.ACTION, cost=4, special="throne_room"
 COUNCIL_ROOM = Card("Council Room", CardType.ACTION, cost=5, cards_drawn=4, buys=1)
 MONEYLENDER = Card("Moneylender", CardType.ACTION, cost=4, special="moneylender")
 GARDENS = Card("Gardens", CardType.VICTORY, cost=4, special="gardens")
+MINE = Card("Mine", CardType.ACTION, cost=5, special="mine")
+MERCHANT = Card("Merchant", CardType.ACTION, cost=3, cards_drawn=1, actions=1, special="merchant")
 
 ALL_CARDS: dict[str, Card] = {c.name: c for c in [
     COPPER, SILVER, GOLD,
     ESTATE, DUCHY, PROVINCE,
     VILLAGE, SMITHY, MARKET, LABORATORY, FESTIVAL, CHAPEL,
     THRONE_ROOM, COUNCIL_ROOM, MONEYLENDER, GARDENS,
+    MINE, MERCHANT,
 ]}
 
 TREASURE_CARDS = ["Copper", "Silver", "Gold"]
@@ -57,6 +60,7 @@ VICTORY_CARDS = ["Estate", "Duchy", "Province"]
 KINGDOM_CARDS = [
     "Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
     "Throne Room", "Council Room", "Moneylender", "Gardens",
+    "Mine", "Merchant",
 ]
 ACTION_CARDS = [c for c in KINGDOM_CARDS if ALL_CARDS[c].card_type == CardType.ACTION]
 

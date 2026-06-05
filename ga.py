@@ -125,6 +125,9 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
         throne_room_priority=order_crossover(
             p1.throne_room_priority, p2.throne_room_priority, rng
         ),
+        mine_trash_priority=order_crossover(
+            p1.mine_trash_priority, p2.mine_trash_priority, rng
+        ),
         chapel_max_trash=rng.choice([p1.chapel_max_trash, p2.chapel_max_trash]),
         transitions=Transitions(
             early_to_mid_turn=rng.choice([
@@ -171,6 +174,7 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random) -> Strategy:
     s.late_buy_priority = _mutate_list(s.late_buy_priority, rate, rng)
     s.action_priority = _mutate_list(s.action_priority, rate, rng, allow_pass=False)
     s.throne_room_priority = _mutate_list(s.throne_room_priority, rate, rng, allow_pass=False)
+    s.mine_trash_priority = _mutate_list(s.mine_trash_priority, rate, rng, allow_pass=False)
     s.chapel_trash_priority = _mutate_list(s.chapel_trash_priority, rate, rng, allow_pass=False)
 
     # Jitter chapel_max_trash

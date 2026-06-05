@@ -1,15 +1,22 @@
 """Game trace — watch the AI model play turn-by-turn.
 
 Usage:
-    python trace.py              # trace best model vs Big Money
-    python trace.py --seed 123   # specific seed for reproducibility
-    python trace.py --vs self    # trace best model vs itself
+    python trace.py                    # best model vs Big Money
+    python trace.py --seed 123         # specific seed
+    python trace.py --vs self          # best model vs itself
+    python trace.py --vs prev          # best model vs previous gen
+    python trace.py --vs bigmoney      # best model vs Big Money
+    python trace.py --vs 42            # best model vs gen 42
+    python trace.py --vs gen_042/strategy.json  # explicit path
+    python trace.py --list             # list available generations
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import random
+import re
 from collections import Counter
 
 from cards import ALL_CARDS, CardType, KINGDOM_CARDS
@@ -17,7 +24,7 @@ from engine import (
     GameState, default_supply, draw_cards, cleanup,
     is_game_over, count_vp, resolve_action, apply_action_effects,
     auto_play_treasures, buy_card, trash_card,
-    play_moneylender, play_chapel, _new_player,
+    play_moneylender, play_chapel, play_mine, _new_player,
 )
 from strategy import (
     Strategy, load_strategy, big_money_strategy,
@@ -130,6 +137,12 @@ def traced_action_phase(state: GameState, strategy: Strategy) -> list[str]:
                         lines.append("  (no Copper to trash)")
                 elif card.special == "throne_room":
                     lines.extend(traced_throne_room(state, strategy))
+                elif card.special == "mine":
+                    result = play_mine(state, strategy)
+                    if result:
+                        lines.append(f"  TRASH {result[0]} -> gain {result[1]}")
+                    else:
+                        lines.append("  (nothing to upgrade)")
 
                 played = True
                 break
@@ -197,6 +210,12 @@ def traced_throne_room(state: GameState, strategy: Strategy) -> list[str]:
                 lines.append("    TRASH Copper (+$3)")
             else:
                 lines.append("    (no Copper to trash)")
+        elif target_card.special == "mine":
+            result = play_mine(state, strategy)
+            if result:
+                lines.append(f"    TRASH {result[0]} -> gain {result[1]}")
+            else:
+                lines.append("    (nothing to upgrade)")
 
     return lines
 
@@ -405,6 +424,78 @@ def _game_result(p1, p2, turns, label1, label2):
 
 
 # ---------------------------------------------------------------------------
+# Model discovery
+# ---------------------------------------------------------------------------
+
+def _find_gens(model_dir: str = "best_model") -> list[int]:
+    """Return sorted list of generation numbers found under model_dir."""
+    gens = []
+    if os.path.isdir(model_dir):
+        for entry in os.listdir(model_dir):
+            m = re.match(r"gen_(\d+)", entry)
+            if m:
+                path = os.path.join(model_dir, entry, "strategy.json")
+                if os.path.isfile(path):
+                    gens.append(int(m.group(1)))
+    return sorted(gens)
+
+
+def _resolve_opponent(vs: str, model_dir: str = "best_model") -> tuple[Strategy, str]:
+    """Resolve --vs argument to (strategy, label).
+
+    Accepts: 'bigmoney', 'self', 'prev', a gen number like '42',
+    or a path to a strategy.json file.
+    """
+    if vs == "bigmoney":
+        return big_money_strategy(), "Big Money"
+
+    if vs == "self":
+        strat = load_strategy(os.path.join(model_dir, "strategy.json"))
+        return strat, "Model (copy)"
+
+    if vs == "prev":
+        gens = _find_gens(model_dir)
+        if len(gens) < 2:
+            print("Not enough generations for --vs prev, falling back to Big Money")
+            return big_money_strategy(), "Big Money"
+        prev_gen = gens[-2]
+        path = os.path.join(model_dir, f"gen_{prev_gen:03d}", "strategy.json")
+        return load_strategy(path), f"Gen {prev_gen}"
+
+    # Try as a gen number
+    if vs.isdigit():
+        gen = int(vs)
+        # Try both zero-padded and unpadded
+        for fmt in [f"gen_{gen:03d}", f"gen_{gen}"]:
+            path = os.path.join(model_dir, fmt, "strategy.json")
+            if os.path.isfile(path):
+                return load_strategy(path), f"Gen {gen}"
+        print(f"Gen {gen} not found. Available: {', '.join(str(g) for g in _find_gens(model_dir)[-10:])}")
+        raise SystemExit(1)
+
+    # Try as a file path
+    if os.path.isfile(vs):
+        label = os.path.basename(os.path.dirname(vs)) or vs
+        return load_strategy(vs), label
+
+    print(f"Unknown --vs value: {vs}")
+    raise SystemExit(1)
+
+
+def _list_gens(model_dir: str = "best_model") -> None:
+    """Print available generations."""
+    gens = _find_gens(model_dir)
+    if not gens:
+        print("No saved generations found.")
+        return
+    print(f"Available generations ({len(gens)} total):")
+    # Show in rows of 10
+    for i in range(0, len(gens), 10):
+        row = gens[i:i + 10]
+        print("  " + "  ".join(f"{g:>5d}" for g in row))
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -415,18 +506,18 @@ def main():
     parser.add_argument("--model", default="best_model/strategy.json",
                         help="Path to strategy JSON")
     parser.add_argument("--vs", default="bigmoney",
-                        choices=["bigmoney", "self"],
-                        help="Opponent type: bigmoney or self")
+                        help="Opponent: bigmoney, self, prev, a gen number, or a path")
+    parser.add_argument("--list", action="store_true",
+                        help="List available generations and exit")
     args = parser.parse_args()
 
-    strategy = load_strategy(args.model)
+    if args.list:
+        _list_gens()
+        return
 
-    if args.vs == "self":
-        opponent = load_strategy(args.model)
-        opp_label = "Model (copy)"
-    else:
-        opponent = big_money_strategy()
-        opp_label = "Big Money"
+    strategy = load_strategy(args.model)
+    model_dir = os.path.dirname(args.model) or "best_model"
+    opponent, opp_label = _resolve_opponent(args.vs, model_dir)
 
     trace_game(strategy, opponent,
                label1="Model", label2=opp_label,

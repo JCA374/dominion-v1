@@ -18,15 +18,20 @@ import os
 import random
 
 # === Config ===
-POP_SIZE        = 100 #60
-GENERATIONS     = 1000 #100
+POP_SIZE        = 60 #60
+GENERATIONS     = 10000 #100
 GAMES_PER_EVAL  = 50 #50
 TOURNAMENT_SIZE = 4
 ELITE_COUNT     = 2
 MUTATION_RATE   = 0.1
 SEED            = 42
+# All available kingdom cards (12 total — a standard game uses 10)
+ALL_KINGDOM     = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
+                   "Throne Room", "Council Room", "Moneylender", "Gardens",
+                   "Mine", "Merchant"]
+# Select 10 for training — change this list to train on different kingdoms
 KINGDOM         = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
-                   "Throne Room", "Council Room", "Moneylender", "Gardens"]
+                   "Throne Room", "Council Room", "Mine", "Gardens"]
 OPPONENT_PATH   = "auto"  # "auto" = use best_model/strategy.json if it exists, None = Big Money
 SWITCH_AT       = 0.7  # Auto-switch opponent when win rate exceeds this
 WORKERS         = 8    # Parallel workers for evaluation (1 = sequential)

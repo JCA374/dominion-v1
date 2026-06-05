@@ -7,7 +7,7 @@ import os
 import random
 from dataclasses import dataclass, asdict, field
 
-from cards import BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS
+from cards import BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS, TREASURE_CARDS
 
 
 @dataclass
@@ -25,6 +25,7 @@ class Strategy:
     chapel_trash_priority: list[str]
     transitions: Transitions
     throne_room_priority: list[str] = field(default_factory=list)  # which action to double (best first)
+    mine_trash_priority: list[str] = field(default_factory=list)  # which treasure to upgrade (Copper/Silver)
     chapel_max_trash: int = 4          # 0-4: max cards to trash per Chapel play
     buy_targets: dict[str, int] = field(default_factory=dict)  # card -> max copies to own (empty = no limits)
 
@@ -77,6 +78,9 @@ def random_strategy(rng: random.Random) -> Strategy:
     tr_candidates = [c for c in ACTION_CARDS if c != "Throne Room"]
     throne_room_priority = shuffled(tr_candidates)
 
+    # Mine trash priority: which treasure to upgrade first
+    mine_trash_priority = shuffled(["Copper", "Silver"])
+
     return Strategy(
         early_buy_priority=random_buy_priority(),
         mid_buy_priority=random_buy_priority(),
@@ -84,6 +88,7 @@ def random_strategy(rng: random.Random) -> Strategy:
         action_priority=shuffled(ACTION_CARDS),
         chapel_trash_priority=chapel_priority,
         throne_room_priority=throne_room_priority,
+        mine_trash_priority=mine_trash_priority,
         chapel_max_trash=rng.randint(0, 4),
         transitions=Transitions(
             early_to_mid_turn=rng.randint(2, 15),
@@ -104,6 +109,11 @@ def _default_throne_room_priority() -> list[str]:
     return [c for c in ACTION_CARDS if c != "Throne Room"]
 
 
+def _default_mine_trash_priority() -> list[str]:
+    """Default Mine trash priority: upgrade Copper first, then Silver."""
+    return ["Copper", "Silver"]
+
+
 def big_money_strategy() -> Strategy:
     """Seed archetype: Province > Gold > Silver, no actions."""
     return Strategy(
@@ -113,6 +123,7 @@ def big_money_strategy() -> Strategy:
         action_priority=ACTION_CARDS[:],
         chapel_trash_priority=["STOP"],
         throne_room_priority=_default_throne_room_priority(),
+        mine_trash_priority=_default_mine_trash_priority(),
         chapel_max_trash=0,
         transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
         buy_targets={},  # no limits — pure Big Money
@@ -126,10 +137,11 @@ def gardens_strategy() -> Strategy:
         mid_buy_priority=_full_buy_priority(["Gardens", "Silver", "Throne Room", "Copper", "Estate"]),
         late_buy_priority=_full_buy_priority(["Province", "Gardens", "Duchy", "Estate", "Copper"]),
         action_priority=["Council Room", "Throne Room", "Village", "Smithy", "Market",
-                         "Festival", "Laboratory", "Moneylender", "Chapel"],
+                         "Festival", "Laboratory", "Moneylender", "Chapel", "Mine", "Merchant"],
         chapel_trash_priority=["STOP"],
         throne_room_priority=["Council Room", "Smithy", "Laboratory", "Festival",
-                              "Market", "Village", "Moneylender", "Chapel"],
+                              "Market", "Village", "Moneylender", "Chapel", "Mine", "Merchant"],
+        mine_trash_priority=_default_mine_trash_priority(),
         chapel_max_trash=0,
         transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=2),
         buy_targets={"Gardens": 8},
@@ -143,15 +155,18 @@ def engine_strategy() -> Strategy:
         mid_buy_priority=_full_buy_priority(["Gold", "Smithy", "Silver", "Market", "Laboratory"]),
         late_buy_priority=_full_buy_priority(["Province", "Duchy", "Gold", "Estate"]),
         action_priority=["Village", "Festival", "Laboratory", "Market",
-                         "Council Room", "Smithy", "Moneylender", "Throne Room", "Chapel"],
+                         "Council Room", "Smithy", "Moneylender", "Throne Room",
+                         "Mine", "Merchant", "Chapel"],
         chapel_trash_priority=["Estate", "STOP", "Copper"],
         throne_room_priority=["Smithy", "Laboratory", "Council Room", "Festival",
-                              "Market", "Village", "Moneylender", "Chapel"],
+                              "Market", "Village", "Moneylender", "Chapel",
+                              "Mine", "Merchant"],
+        mine_trash_priority=["Copper", "Silver"],
         chapel_max_trash=2,
         transitions=Transitions(early_to_mid_turn=5, mid_to_late_provinces=4),
         buy_targets={"Chapel": 1, "Smithy": 2, "Village": 3, "Market": 2,
                      "Laboratory": 3, "Festival": 2, "Council Room": 2,
-                     "Moneylender": 1, "Throne Room": 2},
+                     "Moneylender": 1, "Throne Room": 2, "Mine": 1, "Merchant": 2},
     )
 
 
@@ -176,6 +191,8 @@ def describe(strategy: Strategy, fitness: float | None = None) -> str:
     lines.append(f"Actions: {fmt_list(strategy.action_priority)}")
     if strategy.throne_room_priority:
         lines.append(f"Throne Room doubles: {fmt_list(strategy.throne_room_priority)}")
+    if strategy.mine_trash_priority:
+        lines.append(f"Mine upgrades: {' > '.join(strategy.mine_trash_priority)}")
     lines.append(f"Chapel trash: {fmt_list(strategy.chapel_trash_priority)} (max {strategy.chapel_max_trash})")
     if strategy.buy_targets:
         targets = ", ".join(f"{c}:{n}" for c, n in strategy.buy_targets.items() if n < 99)
@@ -358,9 +375,10 @@ def load_strategy(path: str) -> Strategy:
     """Load a strategy from a JSON file."""
     with open(path) as f:
         data = json.load(f)
-    # Backward compat: old models without throne_room_priority get a default
+    # Backward compat: old models without newer genes get defaults
     throne_room_priority = data.get("throne_room_priority",
                                     [c for c in ACTION_CARDS if c != "Throne Room"])
+    mine_trash_priority = data.get("mine_trash_priority", ["Copper", "Silver"])
     return Strategy(
         early_buy_priority=data["early_buy_priority"],
         mid_buy_priority=data["mid_buy_priority"],
@@ -368,6 +386,7 @@ def load_strategy(path: str) -> Strategy:
         action_priority=data["action_priority"],
         chapel_trash_priority=data["chapel_trash_priority"],
         throne_room_priority=throne_room_priority,
+        mine_trash_priority=mine_trash_priority,
         chapel_max_trash=data.get("chapel_max_trash", 4),
         transitions=Transitions(**data["transitions"]),
         buy_targets=data.get("buy_targets", {}),

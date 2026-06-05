@@ -19,6 +19,7 @@ from engine import (
     resolve_action, apply_action_effects, auto_play_treasures,
     buy_card, trash_card, play_moneylender, _new_player,
 )
+from cards import TREASURE_CARDS
 from strategy import load_strategy, describe, Strategy, big_money_strategy
 
 
@@ -209,6 +210,8 @@ def _play_single_action(state: GameState, card_name: str) -> None:
             print("  (no Copper in hand to trash)")
     elif card.special == "throne_room":
         human_throne_room(state)
+    elif card.special == "mine":
+        human_mine(state)
 
     # Show updated hand
     hand = sorted(state.hand, key=lambda c: (ALL_CARDS[c].card_type.value, c))
@@ -311,6 +314,54 @@ def human_throne_room(state: GameState) -> None:
                 print("  Trashed Copper, gained +$3")
             else:
                 print("  (no Copper to trash)")
+        elif target_card.special == "mine":
+            human_mine(state)
+
+
+def human_mine(state: GameState) -> None:
+    """Let human pick a treasure to trash and upgrade via Mine."""
+    treasures_in_hand = [c for c in state.hand
+                         if ALL_CARDS[c].card_type == CardType.TREASURE
+                         and c != "Gold"]  # Gold can't be upgraded
+    if not treasures_in_hand:
+        print("  (no treasure to upgrade)")
+        return
+
+    unique = sorted(set(treasures_in_hand), key=lambda c: ALL_CARDS[c].cost)
+    print(f"\n  Mine — trash a treasure to gain one costing up to $3 more:")
+    for i, name in enumerate(unique, 1):
+        cost = ALL_CARDS[name].cost
+        max_cost = cost + 3
+        upgrades = [t for t in ["Silver", "Gold"]
+                    if ALL_CARDS[t].cost <= max_cost and ALL_CARDS[t].cost > cost
+                    and state.supply.get(t, 0) > 0]
+        upgrade_str = f" -> {' or '.join(upgrades)}" if upgrades else " (no upgrade available)"
+        print(f"    {i}. {_card_str(name)}{upgrade_str}")
+    print(f"    0. Skip")
+
+    try:
+        choice = input("  Trash which treasure? [0]: ").strip()
+        if choice == "" or choice == "0":
+            return
+        idx = int(choice)
+        if 1 <= idx <= len(unique):
+            trash_name = unique[idx - 1]
+            trashed_cost = ALL_CARDS[trash_name].cost
+            max_gain = trashed_cost + 3
+            # Find best gain
+            for gain_name in ["Gold", "Silver"]:
+                gc = ALL_CARDS[gain_name].cost
+                if gc <= max_gain and gc > trashed_cost and state.supply.get(gain_name, 0) > 0:
+                    trash_card(state, trash_name)
+                    state.supply[gain_name] -= 1
+                    state.hand.append(gain_name)
+                    print(f"  Trashed {trash_name}, gained {gain_name} to hand")
+                    return
+            print("  (no valid upgrade in supply)")
+        else:
+            print("  Invalid choice.")
+    except (ValueError, EOFError):
+        pass
 
 
 def human_buy_phase(state: GameState) -> None:

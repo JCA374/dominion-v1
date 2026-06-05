@@ -114,12 +114,19 @@ def apply_action_effects(state: GameState, card_name: str) -> list[str]:
 
 
 def auto_play_treasures(state: GameState) -> list[str]:
-    """Move all treasures from hand to play area, add coins. Return names played."""
+    """Move all treasures from hand to play area, add coins. Return names played.
+
+    Applies Merchant bonus: +$1 per Merchant in play area for the first Silver played.
+    """
     treasures = [c for c in state.hand if ALL_CARDS[c].card_type == CardType.TREASURE]
     for t in treasures:
         state.hand.remove(t)
         state.play_area.append(t)
         state.coins += ALL_CARDS[t].coins
+    # Merchant bonus: each Merchant in play grants +$1 on the first Silver
+    if "Silver" in treasures:
+        merchant_count = sum(1 for c in state.play_area if c == "Merchant")
+        state.coins += merchant_count
     return treasures
 
 
@@ -155,6 +162,8 @@ def play_action_phase(state: GameState, strategy: Strategy) -> None:
                     play_moneylender(state)
                 elif ALL_CARDS[card_name].special == "throne_room":
                     play_throne_room(state, strategy)
+                elif ALL_CARDS[card_name].special == "mine":
+                    play_mine(state, strategy)
 
                 played = True
                 break  # re-scan from top of priority list
@@ -169,6 +178,29 @@ def play_moneylender(state: GameState) -> bool:
         state.coins += 3
         return True
     return False
+
+
+def play_mine(state: GameState, strategy: Strategy) -> tuple[str, str] | None:
+    """Trash a Treasure from hand, gain a Treasure costing up to $3 more to hand.
+
+    Uses strategy.mine_trash_priority to decide which treasure to trash.
+    Returns (trashed, gained) or None if nothing happened.
+    """
+    for treasure_name in strategy.mine_trash_priority:
+        if treasure_name not in state.hand:
+            continue
+        trashed_cost = ALL_CARDS[treasure_name].cost
+        max_gain_cost = trashed_cost + 3
+        # Find best treasure to gain (highest cost up to max_gain_cost)
+        for gain_name in ["Gold", "Silver", "Copper"]:
+            gain_cost = ALL_CARDS[gain_name].cost
+            if gain_cost <= max_gain_cost and gain_cost > trashed_cost and state.supply.get(gain_name, 0) > 0:
+                trash_card(state, treasure_name)
+                state.supply[gain_name] -= 1
+                state.hand.append(gain_name)  # Mine puts gained card in hand
+                return (treasure_name, gain_name)
+        # No upgrade available for this treasure, try next in priority
+    return None
 
 
 def play_throne_room(state: GameState, strategy: Strategy) -> str | None:
@@ -198,6 +230,8 @@ def play_throne_room(state: GameState, strategy: Strategy) -> str | None:
             play_chapel(state, strategy)
         elif card.special == "moneylender":
             play_moneylender(state)
+        elif card.special == "mine":
+            play_mine(state, strategy)
 
     return target
 

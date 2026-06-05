@@ -5,7 +5,8 @@ import random
 from cards import ALL_CARDS, BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS, CardType
 from engine import (
     new_game, play_game, play_game_2p, play_action_phase, play_buy_phase,
-    play_chapel, play_moneylender, play_throne_room, cleanup,
+    play_chapel, play_moneylender, play_throne_room, play_mine,
+    auto_play_treasures, cleanup,
     is_game_over, count_vp, default_supply, GameState, draw_cards,
 )
 from strategy import (
@@ -18,8 +19,8 @@ from ga import order_crossover, mutate, crossover, init_population
 
 
 def test_card_definitions():
-    """All 16 cards defined with correct costs."""
-    assert len(ALL_CARDS) == 16
+    """All 18 cards defined with correct costs."""
+    assert len(ALL_CARDS) == 18
     assert ALL_CARDS["Copper"].cost == 0
     assert ALL_CARDS["Province"].cost == 8
     assert ALL_CARDS["Province"].vp == 6
@@ -42,6 +43,13 @@ def test_card_definitions():
     assert ALL_CARDS["Gardens"].cost == 4
     assert ALL_CARDS["Gardens"].card_type == CardType.VICTORY
     assert ALL_CARDS["Gardens"].special == "gardens"
+    # Mine and Merchant
+    assert ALL_CARDS["Mine"].cost == 5
+    assert ALL_CARDS["Mine"].special == "mine"
+    assert ALL_CARDS["Merchant"].cost == 3
+    assert ALL_CARDS["Merchant"].cards_drawn == 1
+    assert ALL_CARDS["Merchant"].actions == 1
+    assert ALL_CARDS["Merchant"].special == "merchant"
 
 
 def test_single_game_big_money():
@@ -108,6 +116,10 @@ def test_random_strategies_valid():
         tr_set = action_set - {"Throne Room"}
         assert set(s.throne_room_priority) == tr_set
         assert len(s.throne_room_priority) == len(tr_set)
+
+        # Mine trash priority: Copper and Silver
+        assert set(s.mine_trash_priority) == {"Copper", "Silver"}
+        assert len(s.mine_trash_priority) == 2
 
         assert 2 <= s.transitions.early_to_mid_turn <= 15
         assert 0 <= s.transitions.mid_to_late_provinces <= 8
@@ -1238,6 +1250,149 @@ def test_gardens_in_supply():
     """Gardens should have 12 supply (victory card count)."""
     supply = default_supply()
     assert supply["Gardens"] == 12
+
+
+def test_mine_upgrades_copper_to_silver():
+    """Mine should trash Copper and gain Silver to hand."""
+    state = _make_state_with_hand(["Mine", "Copper", "Silver"])
+    strategy = Strategy(
+        early_buy_priority=BUYABLE_CARDS[:],
+        mid_buy_priority=BUYABLE_CARDS[:],
+        late_buy_priority=BUYABLE_CARDS[:],
+        action_priority=["Mine"],
+        chapel_trash_priority=["STOP"],
+        mine_trash_priority=["Copper", "Silver"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    play_action_phase(state, strategy)
+
+    assert "Mine" in state.play_area
+    assert state.trash == ["Copper"]
+    assert "Silver" in state.hand
+    # Gained Silver goes to hand, so 2 Silvers now
+    assert state.hand.count("Silver") == 2
+    assert state.actions == 0
+
+
+def test_mine_upgrades_silver_to_gold():
+    """Mine should trash Silver and gain Gold to hand."""
+    state = _make_state_with_hand(["Mine", "Silver", "Copper"])
+    strategy = Strategy(
+        early_buy_priority=BUYABLE_CARDS[:],
+        mid_buy_priority=BUYABLE_CARDS[:],
+        late_buy_priority=BUYABLE_CARDS[:],
+        action_priority=["Mine"],
+        chapel_trash_priority=["STOP"],
+        mine_trash_priority=["Silver", "Copper"],  # prefer Silver upgrade
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    play_action_phase(state, strategy)
+
+    assert state.trash == ["Silver"]
+    assert "Gold" in state.hand
+    assert "Copper" in state.hand
+
+
+def test_mine_no_treasure():
+    """Mine with no treasure in hand does nothing."""
+    state = _make_state_with_hand(["Mine", "Estate", "Estate"])
+    strategy = Strategy(
+        early_buy_priority=BUYABLE_CARDS[:],
+        mid_buy_priority=BUYABLE_CARDS[:],
+        late_buy_priority=BUYABLE_CARDS[:],
+        action_priority=["Mine"],
+        chapel_trash_priority=["STOP"],
+        mine_trash_priority=["Copper", "Silver"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    play_action_phase(state, strategy)
+
+    assert state.trash == []
+
+
+def test_mine_empty_supply_skips():
+    """Mine skips upgrade if target treasure supply is empty."""
+    state = _make_state_with_hand(["Mine", "Copper", "Copper"])
+    state.supply["Silver"] = 0
+    strategy = Strategy(
+        early_buy_priority=BUYABLE_CARDS[:],
+        mid_buy_priority=BUYABLE_CARDS[:],
+        late_buy_priority=BUYABLE_CARDS[:],
+        action_priority=["Mine"],
+        chapel_trash_priority=["STOP"],
+        mine_trash_priority=["Copper", "Silver"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    play_action_phase(state, strategy)
+
+    # No Silver in supply, can't upgrade Copper
+    assert state.trash == []
+    assert state.hand.count("Copper") == 2
+
+
+def test_merchant_bonus_with_silver():
+    """Merchant in play area gives +$1 when Silver is played as treasure."""
+    state = _make_state_with_hand(["Merchant", "Silver", "Copper"],
+                                  deck=["Estate"] * 5)
+    strategy = Strategy(
+        early_buy_priority=BUYABLE_CARDS[:],
+        mid_buy_priority=BUYABLE_CARDS[:],
+        late_buy_priority=BUYABLE_CARDS[:],
+        action_priority=["Merchant"],
+        chapel_trash_priority=["STOP"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    play_action_phase(state, strategy)
+    # Merchant: +1 card, +1 action drawn an Estate
+    assert "Merchant" in state.play_area
+    assert state.actions == 1  # spent 1, gained 1
+
+    # Now play treasures
+    treasures = auto_play_treasures(state)
+    # Silver(2) + Copper(1) + Merchant bonus(1) = 4
+    assert state.coins == 4
+
+
+def test_merchant_no_silver_no_bonus():
+    """Merchant gives no bonus if no Silver is played."""
+    state = _make_state_with_hand(["Merchant", "Copper", "Copper"],
+                                  deck=["Estate"] * 5)
+    strategy = Strategy(
+        early_buy_priority=BUYABLE_CARDS[:],
+        mid_buy_priority=BUYABLE_CARDS[:],
+        late_buy_priority=BUYABLE_CARDS[:],
+        action_priority=["Merchant"],
+        chapel_trash_priority=["STOP"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    play_action_phase(state, strategy)
+    treasures = auto_play_treasures(state)
+    # Copper(1) + Copper(1) + drawn Estate(0) = 2, no Merchant bonus
+    assert state.coins == 2
+
+
+def test_multiple_merchants_stack():
+    """Multiple Merchants each grant +$1 on first Silver."""
+    state = GameState()
+    state.rng = random.Random(0)
+    state.hand = ["Silver", "Copper"]
+    state.deck = ["Estate"] * 5
+    state.supply = _full_supply()
+    state.actions = 0
+    state.buys = 1
+    state.coins = 0
+    # Simulate 2 Merchants already played
+    state.play_area = ["Merchant", "Merchant"]
+
+    treasures = auto_play_treasures(state)
+    # Silver(2) + Copper(1) + 2 Merchants(2) = 5
+    assert state.coins == 5
 
 
 def test_save_and_load_best_model(tmp_path):
