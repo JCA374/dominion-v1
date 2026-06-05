@@ -1,0 +1,6 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+best_model/
+evolution_log.csv
+*.png
