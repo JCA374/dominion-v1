@@ -1,29 +1,73 @@
-"""Phase-Aware Genetic Algorithm for Simplified Dominion — entry point."""
+"""Phase-Aware Genetic Algorithm for Simplified Dominion — entry point.
 
+Usage:
+    python main.py              # fresh training run
+    python main.py --continue   # continue from best model, numbering continues
+"""
+
+import argparse
+import re
 import time
 
-from ga import run_ga
-from strategy import describe, summarize, save_best_model, load_strategy
+from copy import deepcopy
+from ga import run_ga, mutate
+from strategy import describe, summarize, save_best_model, load_strategy, random_strategy
 from plotting import save_all_plots
 from fitness import evaluate_vs_opponent, make_seed_list
 import os
 import random
 
 # === Config ===
-POP_SIZE        = 60 #60
-GENERATIONS     = 500 #100
+POP_SIZE        = 100 #60
+GENERATIONS     = 1000 #100
 GAMES_PER_EVAL  = 50 #50
 TOURNAMENT_SIZE = 4
 ELITE_COUNT     = 2
 MUTATION_RATE   = 0.1
 SEED            = 42
-KINGDOM         = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel"]
+KINGDOM         = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
+                   "Throne Room", "Council Room", "Moneylender", "Gardens"]
 OPPONENT_PATH   = "auto"  # "auto" = use best_model/strategy.json if it exists, None = Big Money
 SWITCH_AT       = 0.7  # Auto-switch opponent when win rate exceeds this
 WORKERS         = 8    # Parallel workers for evaluation (1 = sequential)
 
 
+def _find_last_gen(model_dir: str = "best_model") -> int:
+    """Scan best_model/gen_NNN dirs and return the highest generation number, or 0."""
+    last = 0
+    if os.path.isdir(model_dir):
+        for entry in os.listdir(model_dir):
+            m = re.match(r"gen_(\d+)", entry)
+            if m:
+                last = max(last, int(m.group(1)))
+    return last
+
+
+def _build_continue_population(best: 'Strategy', pop_size: int,
+                               rng: random.Random) -> list['Strategy']:
+    """Build a population seeded from the best model.
+
+    Keeps the best strategy as elite, fills the rest with mutated variants
+    to provide genetic diversity.
+    """
+    population = [deepcopy(best)]
+    for _ in range(pop_size - 1):
+        # Higher mutation rate for initial diversity
+        child = mutate(deepcopy(best), rate=0.3, rng=rng)
+        population.append(child)
+    return population
+
+
 def main():
+    parser = argparse.ArgumentParser(description="Dominion GA trainer")
+    parser.add_argument("--continue", dest="continue_training", action="store_true",
+                        help="Continue training from best_model/, generation numbering continues")
+    args = parser.parse_args()
+
+    continuing = args.continue_training
+    start_gen = 0
+    initial_population = None
+
     # Load opponent: "auto" checks for saved model, None forces Big Money
     opponent = None
     opponent_label = "Big Money"
@@ -34,9 +78,23 @@ def main():
         opponent = load_strategy(opponent_path)
         opponent_label = opponent_path
 
-    print(f"=== Phase-Aware GA for Simplified Dominion ===")
+    if continuing:
+        if not os.path.exists("best_model/strategy.json"):
+            print("ERROR: No best_model/strategy.json found. Run a fresh training first.")
+            return
+        best = load_strategy("best_model/strategy.json")
+        start_gen = _find_last_gen()
+        rng = random.Random(SEED + start_gen)
+        initial_population = _build_continue_population(best, POP_SIZE, rng)
+        # Use the best model as opponent
+        opponent = best
+        opponent_label = f"best_model (gen {start_gen})"
+        print(f"=== Continuing from generation {start_gen} ===")
+    else:
+        print(f"=== Phase-Aware GA for Simplified Dominion ===")
+
     print(f"Seed: {SEED}")
-    print(f"Population: {POP_SIZE}, Generations: {GENERATIONS}, "
+    print(f"Population: {POP_SIZE}, Generations: {start_gen + 1}-{start_gen + GENERATIONS}, "
           f"Games/eval: {GAMES_PER_EVAL}")
     print(f"Opponent: {opponent_label}")
     print(f"Workers: {WORKERS}")
@@ -50,12 +108,15 @@ def main():
         "elite_count": ELITE_COUNT,
         "mutation_rate": MUTATION_RATE,
         "kingdom": KINGDOM,
-        "seed": SEED,
+        "seed": SEED + start_gen,  # different seed so we don't replay same games
         "opponent": opponent,
         "opponent_label": opponent_label,
         "switch_threshold": SWITCH_AT,
         "workers": WORKERS,
         "csv_path": "evolution_log.csv",
+        "start_gen": start_gen,
+        "initial_population": initial_population,
+        "csv_append": continuing,
     }
 
     start = time.time()

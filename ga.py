@@ -8,11 +8,12 @@ import random
 from copy import deepcopy
 from dataclasses import asdict
 
-from cards import BUYABLE_CARDS, ACTION_CARDS
+from cards import BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS
 from fitness import evaluate, evaluate_vs_opponent, evaluate_population, make_seed_list
 from strategy import (
     Strategy, Transitions, random_strategy, big_money_strategy,
-    engine_strategy, describe, get_current_phase, save_best_model,
+    engine_strategy, gardens_strategy, describe, get_current_phase,
+    save_best_model,
 )
 
 
@@ -22,7 +23,7 @@ from strategy import (
 
 def init_population(pop_size: int, rng: random.Random) -> list[Strategy]:
     """Create initial population: random strategies + seeded archetypes."""
-    population = [big_money_strategy(), engine_strategy()]
+    population = [big_money_strategy(), engine_strategy(), gardens_strategy()]
     for _ in range(pop_size - len(population)):
         population.append(random_strategy(rng))
     return population
@@ -96,6 +97,21 @@ def order_crossover(parent1: list[str], parent2: list[str],
 # Crossover
 # ---------------------------------------------------------------------------
 
+def _crossover_targets(t1: dict[str, int], t2: dict[str, int],
+                       rng: random.Random) -> dict[str, int]:
+    """Per-card crossover: pick each target from either parent."""
+    all_keys = set(t1) | set(t2)
+    result = {}
+    for key in all_keys:
+        if key in t1 and key in t2:
+            result[key] = rng.choice([t1[key], t2[key]])
+        elif key in t1:
+            result[key] = t1[key]
+        else:
+            result[key] = t2[key]
+    return result
+
+
 def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
     """Crossover two strategies into a child."""
     return Strategy(
@@ -106,6 +122,10 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
         chapel_trash_priority=order_crossover(
             p1.chapel_trash_priority, p2.chapel_trash_priority, rng
         ),
+        throne_room_priority=order_crossover(
+            p1.throne_room_priority, p2.throne_room_priority, rng
+        ),
+        chapel_max_trash=rng.choice([p1.chapel_max_trash, p2.chapel_max_trash]),
         transitions=Transitions(
             early_to_mid_turn=rng.choice([
                 p1.transitions.early_to_mid_turn,
@@ -116,6 +136,7 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
                 p2.transitions.mid_to_late_provinces,
             ]),
         ),
+        buy_targets=_crossover_targets(p1.buy_targets, p2.buy_targets, rng),
     )
 
 
@@ -149,7 +170,13 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random) -> Strategy:
     s.mid_buy_priority = _mutate_list(s.mid_buy_priority, rate, rng)
     s.late_buy_priority = _mutate_list(s.late_buy_priority, rate, rng)
     s.action_priority = _mutate_list(s.action_priority, rate, rng, allow_pass=False)
+    s.throne_room_priority = _mutate_list(s.throne_room_priority, rate, rng, allow_pass=False)
     s.chapel_trash_priority = _mutate_list(s.chapel_trash_priority, rate, rng, allow_pass=False)
+
+    # Jitter chapel_max_trash
+    if rng.random() < rate:
+        s.chapel_max_trash += rng.choice([-1, 0, 1])
+        s.chapel_max_trash = max(0, min(4, s.chapel_max_trash))
 
     # Jitter transitions
     if rng.random() < rate:
@@ -159,6 +186,20 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random) -> Strategy:
     if rng.random() < rate:
         s.transitions.mid_to_late_provinces += rng.choice([-1, 0, 1])
         s.transitions.mid_to_late_provinces = max(0, min(8, s.transitions.mid_to_late_provinces))
+
+    # Jitter buy targets
+    for card in list(s.buy_targets):
+        if rng.random() < rate:
+            s.buy_targets[card] += rng.choice([-1, 0, 1])
+            s.buy_targets[card] = max(0, min(10, s.buy_targets[card]))
+
+    # Occasionally add/remove a target for a kingdom card
+    if rng.random() < rate / 3:
+        card = rng.choice(KINGDOM_CARDS)
+        if card in s.buy_targets:
+            del s.buy_targets[card]  # remove limit
+        else:
+            s.buy_targets[card] = rng.randint(1, 4)  # add limit
 
     return s
 
@@ -183,27 +224,35 @@ def run_ga(config: dict) -> dict:
     best_model_dir = config.get("best_model_dir", "best_model")
     workers = config.get("workers", 1)
 
+    start_gen = config.get("start_gen", 0)
+    initial_population = config.get("initial_population")
+
     master_rng = random.Random(seed)
     ga_rng = random.Random(master_rng.randint(0, 2**31))
 
-    population = init_population(pop_size, ga_rng)
+    if initial_population is not None:
+        population = initial_population
+    else:
+        population = init_population(pop_size, ga_rng)
     log = []
     overall_best_fitness = -1.0
     overall_best_strategy = None
     opponent_num = 1
 
     csv_path = config.get("csv_path", "evolution_log.csv")
-    csv_file = open(csv_path, "w", newline="")
+    csv_append = config.get("csv_append", False)
+    csv_file = open(csv_path, "a" if csv_append else "w", newline="")
     writer = csv.writer(csv_file)
-    writer.writerow([
-        "generation", "best_win_rate", "mean_win_rate", "worst_win_rate",
-        "early_to_mid_turn", "mid_to_late_provinces",
-        "best_top3_early", "best_top3_mid", "best_top3_late",
-        "mean_turns",
-    ])
+    if not csv_append:
+        writer.writerow([
+            "generation", "best_win_rate", "mean_win_rate", "worst_win_rate",
+            "early_to_mid_turn", "mid_to_late_provinces",
+            "best_top3_early", "best_top3_mid", "best_top3_late",
+            "mean_turns",
+        ])
 
     try:
-        for gen in range(1, generations + 1):
+        for gen in range(start_gen + 1, start_gen + generations + 1):
             # Generate seeds for this generation
             seed_list = make_seed_list(games_per_eval, master_rng)
 
@@ -278,7 +327,7 @@ def run_ga(config: dict) -> dict:
 
             # Switch opponent when win rate is high enough
             if (new_best and best_fitness >= switch_threshold
-                    and gen < generations):
+                    and gen < start_gen + generations):
                 opponent = deepcopy(overall_best_strategy)
                 opponent_num += 1
                 opponent_label = f"best_model_v{opponent_num}"
@@ -287,7 +336,7 @@ def run_ga(config: dict) -> dict:
                       f"(won {best_fitness:.0%} vs previous) <<<")
 
             # Don't evolve after the last generation
-            if gen == generations:
+            if gen == start_gen + generations:
                 break
 
             # --- Selection + reproduction ---

@@ -5,8 +5,8 @@ import random
 from cards import ALL_CARDS, BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS, CardType
 from engine import (
     new_game, play_game, play_game_2p, play_action_phase, play_buy_phase,
-    play_chapel, cleanup, is_game_over, count_vp, default_supply,
-    GameState, draw_cards,
+    play_chapel, play_moneylender, play_throne_room, cleanup,
+    is_game_over, count_vp, default_supply, GameState, draw_cards,
 )
 from strategy import (
     Strategy, Transitions, get_current_phase, random_strategy,
@@ -18,8 +18,8 @@ from ga import order_crossover, mutate, crossover, init_population
 
 
 def test_card_definitions():
-    """All 12 cards defined with correct costs."""
-    assert len(ALL_CARDS) == 12
+    """All 16 cards defined with correct costs."""
+    assert len(ALL_CARDS) == 16
     assert ALL_CARDS["Copper"].cost == 0
     assert ALL_CARDS["Province"].cost == 8
     assert ALL_CARDS["Province"].vp == 6
@@ -31,6 +31,17 @@ def test_card_definitions():
     assert ALL_CARDS["Village"].actions == 2
     assert ALL_CARDS["Smithy"].cards_drawn == 3
     assert ALL_CARDS["Festival"].coins == 2
+    # New cards
+    assert ALL_CARDS["Throne Room"].cost == 4
+    assert ALL_CARDS["Throne Room"].special == "throne_room"
+    assert ALL_CARDS["Council Room"].cost == 5
+    assert ALL_CARDS["Council Room"].cards_drawn == 4
+    assert ALL_CARDS["Council Room"].buys == 1
+    assert ALL_CARDS["Moneylender"].cost == 4
+    assert ALL_CARDS["Moneylender"].special == "moneylender"
+    assert ALL_CARDS["Gardens"].cost == 4
+    assert ALL_CARDS["Gardens"].card_type == CardType.VICTORY
+    assert ALL_CARDS["Gardens"].special == "gardens"
 
 
 def test_single_game_big_money():
@@ -92,6 +103,11 @@ def test_random_strategies_valid():
 
         non_stop = [c for c in s.action_priority if c != "STOP"]
         assert set(non_stop) == action_set
+
+        # Throne Room priority: all actions except Throne Room
+        tr_set = action_set - {"Throne Room"}
+        assert set(s.throne_room_priority) == tr_set
+        assert len(s.throne_room_priority) == len(tr_set)
 
         assert 2 <= s.transitions.early_to_mid_turn <= 15
         assert 0 <= s.transitions.mid_to_late_provinces <= 8
@@ -160,7 +176,7 @@ def test_short_ga_run():
         "elite_count": 1,
         "mutation_rate": 0.1,
         "seed": 42,
-        "kingdom": ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel"],
+        "kingdom": KINGDOM_CARDS,
         "csv_path": "/tmp/smoke_test_log.csv",
     })
 
@@ -169,13 +185,18 @@ def test_short_ga_run():
     assert result["best_strategy"] is not None
 
 
+def _full_supply():
+    """Helper: full default supply for tests."""
+    return default_supply()
+
+
 def _make_state_with_hand(hand, deck=None):
     """Helper: create a GameState with a specific hand and deck."""
     state = GameState()
     state.rng = random.Random(0)
     state.hand = list(hand)
     state.deck = list(deck) if deck is not None else ["Copper"] * 10
-    state.supply = {"Province": 12}
+    state.supply = _full_supply()
     state.actions = 1
     state.buys = 1
     state.coins = 0
@@ -342,9 +363,7 @@ def test_buy_phase_auto_plays_treasures():
 def test_buy_phase_buys_card():
     """Buying a card removes it from supply and adds to discard."""
     state = _make_state_with_hand(["Gold", "Gold"])
-    state.supply = {"Province": 12, "Gold": 30, "Silver": 40, "Duchy": 12,
-                     "Estate": 9, "Copper": 53, "Village": 10, "Smithy": 10,
-                     "Market": 10, "Laboratory": 10, "Festival": 10, "Chapel": 10}
+    state.supply = _full_supply()
     state.turn = 10
     state.buys = 1
     strategy = Strategy(
@@ -370,9 +389,7 @@ def test_buy_phase_buys_card():
 def test_buy_phase_respects_cost():
     """Can't buy a card that costs more than available coins."""
     state = _make_state_with_hand(["Copper"])  # only 1 coin
-    state.supply = {"Province": 12, "Gold": 30, "Silver": 40, "Duchy": 12,
-                     "Estate": 9, "Copper": 53, "Village": 10, "Smithy": 10,
-                     "Market": 10, "Laboratory": 10, "Festival": 10, "Chapel": 10}
+    state.supply = _full_supply()
     state.turn = 10
     state.buys = 1
     # Priority wants Province first, but we can only afford cost <= 1
@@ -397,9 +414,10 @@ def test_buy_phase_respects_cost():
 def test_buy_phase_empty_supply_skipped():
     """Cards with 0 supply are skipped in buy priority."""
     state = _make_state_with_hand(["Gold", "Gold"])  # 6 coins
-    state.supply = {"Province": 0, "Gold": 0, "Silver": 0, "Duchy": 12,
-                     "Estate": 9, "Copper": 53, "Village": 10, "Smithy": 10,
-                     "Market": 10, "Laboratory": 10, "Festival": 10, "Chapel": 10}
+    state.supply = _full_supply()
+    state.supply["Province"] = 0
+    state.supply["Gold"] = 0
+    state.supply["Silver"] = 0
     state.turn = 10
     state.buys = 1
     strategy = Strategy(
@@ -422,9 +440,7 @@ def test_buy_phase_empty_supply_skipped():
 def test_buy_phase_multiple_buys():
     """Extra buys allow purchasing multiple cards in one turn."""
     state = _make_state_with_hand(["Gold", "Gold"])  # 6 coins
-    state.supply = {"Province": 12, "Gold": 30, "Silver": 40, "Duchy": 12,
-                     "Estate": 9, "Copper": 53, "Village": 10, "Smithy": 10,
-                     "Market": 10, "Laboratory": 10, "Festival": 10, "Chapel": 10}
+    state.supply = _full_supply()
     state.turn = 10
     state.buys = 3  # simulate Festival + Market giving extra buys
     strategy = Strategy(
@@ -445,9 +461,7 @@ def test_buy_phase_multiple_buys():
 def test_buy_phase_pass_stops_buying():
     """PASS in buy priority stops all buying even with buys remaining."""
     state = _make_state_with_hand(["Gold", "Gold"])  # 6 coins
-    state.supply = {"Province": 12, "Gold": 30, "Silver": 40, "Duchy": 12,
-                     "Estate": 9, "Copper": 53, "Village": 10, "Smithy": 10,
-                     "Market": 10, "Laboratory": 10, "Festival": 10, "Chapel": 10}
+    state.supply = _full_supply()
     state.turn = 1
     state.buys = 2
     # PASS at the very start — should buy nothing
@@ -693,7 +707,10 @@ def test_default_supply_1p():
     assert supply["Province"] == 12
     assert supply["Duchy"] == 12
     for k in KINGDOM_CARDS:
-        assert supply[k] == 10
+        if ALL_CARDS[k].card_type == CardType.VICTORY:
+            assert supply[k] == 12  # victory kingdom cards
+        else:
+            assert supply[k] == 10
 
 
 def test_default_supply_2p():
@@ -836,9 +853,7 @@ def test_full_turn_action_buy_cleanup():
         ["Village", "Copper", "Copper", "Copper", "Silver"],
         deck=["Copper"] * 10,
     )
-    state.supply = {"Province": 12, "Gold": 30, "Silver": 40, "Duchy": 12,
-                     "Estate": 9, "Copper": 53, "Village": 10, "Smithy": 10,
-                     "Market": 10, "Laboratory": 10, "Festival": 10, "Chapel": 10}
+    state.supply = _full_supply()
     state.turn = 1
     strategy = Strategy(
         early_buy_priority=["Silver"] + [c for c in BUYABLE_CARDS if c != "Silver"],
@@ -1025,6 +1040,205 @@ def test_ga_chapel_mutation_moves_stop():
 # ---------------------------------------------------------------------------
 # Save / load best model
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# New card tests: Woodcutter, Council Room, Moneylender, Gardens
+# ---------------------------------------------------------------------------
+
+def test_throne_room_doubles_smithy():
+    """Throne Room + Smithy should draw 6 cards (3 twice)."""
+    state = _make_state_with_hand(
+        ["Throne Room", "Smithy"],
+        deck=["Copper"] * 10,
+    )
+    strategy = Strategy(
+        early_buy_priority=BUYABLE_CARDS[:],
+        mid_buy_priority=BUYABLE_CARDS[:],
+        late_buy_priority=BUYABLE_CARDS[:],
+        action_priority=["Throne Room", "Smithy"],
+        chapel_trash_priority=["STOP"],
+        throne_room_priority=["Smithy"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    play_action_phase(state, strategy)
+
+    assert "Throne Room" in state.play_area
+    assert "Smithy" in state.play_area
+    assert len(state.hand) == 6  # 3 + 3
+    assert state.actions == 0  # TR costs 1, Smithy gives 0
+
+
+def test_throne_room_doubles_village():
+    """Throne Room + Village: draw 2 cards, gain 4 actions."""
+    state = _make_state_with_hand(
+        ["Throne Room", "Village"],
+        deck=["Copper"] * 10,
+    )
+    strategy = Strategy(
+        early_buy_priority=BUYABLE_CARDS[:],
+        mid_buy_priority=BUYABLE_CARDS[:],
+        late_buy_priority=BUYABLE_CARDS[:],
+        action_priority=["Throne Room", "Village"],
+        chapel_trash_priority=["STOP"],
+        throne_room_priority=["Village"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    play_action_phase(state, strategy)
+
+    assert "Throne Room" in state.play_area
+    assert "Village" in state.play_area
+    assert len(state.hand) == 2  # 1 + 1
+    # TR: 1 - 1 + 0 = 0, then Village doubled: 0 + 2 + 2 = 4
+    assert state.actions == 4
+
+
+def test_throne_room_no_target():
+    """Throne Room with no other action in hand does nothing extra."""
+    state = _make_state_with_hand(
+        ["Throne Room", "Copper", "Silver"],
+        deck=["Copper"] * 10,
+    )
+    strategy = Strategy(
+        early_buy_priority=BUYABLE_CARDS[:],
+        mid_buy_priority=BUYABLE_CARDS[:],
+        late_buy_priority=BUYABLE_CARDS[:],
+        action_priority=["Throne Room", "Smithy"],
+        chapel_trash_priority=["STOP"],
+        throne_room_priority=["Smithy"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    play_action_phase(state, strategy)
+
+    assert "Throne Room" in state.play_area
+    # No action to double, hand unchanged except TR removed
+    assert len(state.hand) == 2  # Copper, Silver
+    assert state.actions == 0
+
+
+def test_throne_room_doubles_moneylender():
+    """Throne Room + Moneylender should trash up to 2 Coppers for +$6."""
+    state = _make_state_with_hand(
+        ["Throne Room", "Moneylender", "Copper", "Copper", "Silver"],
+        deck=["Gold"] * 5,
+    )
+    strategy = Strategy(
+        early_buy_priority=BUYABLE_CARDS[:],
+        mid_buy_priority=BUYABLE_CARDS[:],
+        late_buy_priority=BUYABLE_CARDS[:],
+        action_priority=["Throne Room", "Moneylender"],
+        chapel_trash_priority=["STOP"],
+        throne_room_priority=["Moneylender"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    play_action_phase(state, strategy)
+
+    assert state.trash.count("Copper") == 2
+    assert state.coins == 6  # +$3 twice
+    assert "Silver" in state.hand
+
+
+def test_throne_room_priority_matters():
+    """Throne Room should pick target from throne_room_priority, not action_priority."""
+    state = _make_state_with_hand(
+        ["Throne Room", "Village", "Smithy"],
+        deck=["Copper"] * 10,
+    )
+    # action_priority prefers Village, but throne_room_priority prefers Smithy
+    strategy = Strategy(
+        early_buy_priority=BUYABLE_CARDS[:],
+        mid_buy_priority=BUYABLE_CARDS[:],
+        late_buy_priority=BUYABLE_CARDS[:],
+        action_priority=["Throne Room", "Village", "Smithy"],
+        chapel_trash_priority=["STOP"],
+        throne_room_priority=["Smithy", "Village"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    play_action_phase(state, strategy)
+
+    assert "Throne Room" in state.play_area
+    assert "Smithy" in state.play_area
+    # Smithy doubled = 6 cards drawn; Village still in hand
+    assert "Village" in state.hand
+    assert len(state.hand) == 7  # Village + 6 drawn
+
+
+def test_council_room_draws_four():
+    """Playing Council Room should draw 4 cards and add +1 buy."""
+    state = _make_state_with_hand(
+        ["Council Room"],
+        deck=["Copper", "Silver", "Gold", "Estate", "Duchy"],
+    )
+    strategy = _action_strategy("Council Room")
+
+    play_action_phase(state, strategy)
+
+    assert "Council Room" in state.play_area
+    assert len(state.hand) == 4  # drew 4
+    assert state.actions == 0  # spent 1, gained 0
+    assert state.buys == 2  # started with 1, gained 1
+
+
+def test_moneylender_trashes_copper():
+    """Moneylender should trash a Copper and add +$3."""
+    state = _make_state_with_hand(["Moneylender", "Copper", "Copper", "Silver"])
+    strategy = _action_strategy("Moneylender")
+
+    play_action_phase(state, strategy)
+
+    assert "Moneylender" in state.play_area
+    assert state.trash == ["Copper"]
+    assert state.hand.count("Copper") == 1  # one Copper remains
+    assert state.coins == 3
+    assert state.actions == 0
+
+
+def test_moneylender_no_copper():
+    """Moneylender with no Copper in hand trashes nothing."""
+    state = _make_state_with_hand(["Moneylender", "Silver", "Gold"])
+    strategy = _action_strategy("Moneylender")
+
+    play_action_phase(state, strategy)
+
+    assert "Moneylender" in state.play_area
+    assert state.trash == []
+    assert state.coins == 0
+
+
+def test_gardens_vp():
+    """Gardens should give 1 VP per 10 cards in deck."""
+    state = GameState()
+    # 20 cards total: 2 Gardens = 2 * (20 // 10) = 4 VP from Gardens
+    state.deck = ["Gardens", "Gardens"] + ["Copper"] * 18
+    state.hand = []
+    state.discard = []
+    state.play_area = []
+    vp = count_vp(state)
+    assert vp == 4  # 2 Gardens * 2 VP each (20 cards // 10)
+
+
+def test_gardens_vp_with_victory():
+    """Gardens VP stacks with normal VP."""
+    state = GameState()
+    # 30 cards: 1 Gardens + 1 Estate + 28 Copper
+    state.deck = ["Gardens", "Estate"] + ["Copper"] * 28
+    state.hand = []
+    state.discard = []
+    state.play_area = []
+    vp = count_vp(state)
+    # Estate = 1 VP, Gardens = 1 * (30 // 10) = 3 VP → total 4
+    assert vp == 4
+
+
+def test_gardens_in_supply():
+    """Gardens should have 12 supply (victory card count)."""
+    supply = default_supply()
+    assert supply["Gardens"] == 12
+
 
 def test_save_and_load_best_model(tmp_path):
     """Save best model to disk and load it back."""

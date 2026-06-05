@@ -40,16 +40,24 @@ MARKET = Card("Market", CardType.ACTION, cost=5, cards_drawn=1, actions=1, buys=
 LABORATORY = Card("Laboratory", CardType.ACTION, cost=5, cards_drawn=2, actions=1)
 FESTIVAL = Card("Festival", CardType.ACTION, cost=5, actions=2, buys=1, coins=2)
 CHAPEL = Card("Chapel", CardType.ACTION, cost=2, special="chapel")
+THRONE_ROOM = Card("Throne Room", CardType.ACTION, cost=4, special="throne_room")
+COUNCIL_ROOM = Card("Council Room", CardType.ACTION, cost=5, cards_drawn=4, buys=1)
+MONEYLENDER = Card("Moneylender", CardType.ACTION, cost=4, special="moneylender")
+GARDENS = Card("Gardens", CardType.VICTORY, cost=4, special="gardens")
 
 ALL_CARDS: dict[str, Card] = {c.name: c for c in [
     COPPER, SILVER, GOLD,
     ESTATE, DUCHY, PROVINCE,
     VILLAGE, SMITHY, MARKET, LABORATORY, FESTIVAL, CHAPEL,
+    THRONE_ROOM, COUNCIL_ROOM, MONEYLENDER, GARDENS,
 ]}
 
 TREASURE_CARDS = ["Copper", "Silver", "Gold"]
 VICTORY_CARDS = ["Estate", "Duchy", "Province"]
-KINGDOM_CARDS = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel"]
-ACTION_CARDS = KINGDOM_CARDS  # all kingdom cards are actions in this setup
+KINGDOM_CARDS = [
+    "Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
+    "Throne Room", "Council Room", "Moneylender", "Gardens",
+]
+ACTION_CARDS = [c for c in KINGDOM_CARDS if ALL_CARDS[c].card_type == CardType.ACTION]
 
 BUYABLE_CARDS = TREASURE_CARDS + VICTORY_CARDS + KINGDOM_CARDS
