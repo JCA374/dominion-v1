@@ -1,6 +1,6 @@
 __pycache__/
 .pytest_cache/
 *.pyc
-best_model/
+best_model/gen_*/
 evolution_log.csv
 *.png

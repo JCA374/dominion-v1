@@ -1,0 +1,60 @@
+============================================================
+  BEST TACTIC SUMMARY
+============================================================
+
+  Performance (100 games vs best_model_v11)
+  ────────────────────────────────────────
+  Win rate:  62% win / 0% tie / 38% loss
+  Avg game:  38.1 turns
+
+  Phase Timing
+  ────────────────────────────────────────
+  Early game: turns 1-5
+  Mid game:   turn 6+ while >0 Provinces remain
+  Late game:  0 or fewer Provinces left
+
+  Early Phase — top buys: Festival > Silver > Gardens > Throne Room
+  ────────────────────────────────────────
+  Focus: action cards (Festival, Throne Room), then treasure (Silver), then victory (Gardens)
+  Stops buying after rank 6 (skips cheaper cards if top picks unaffordable)
+
+  Mid Phase — top buys: Council Room > Gardens > Province > Duchy
+  ────────────────────────────────────────
+  Focus: action cards (Council Room), then victory (Gardens, Province, Duchy)
+  Stops buying after rank 12 (skips cheaper cards if top picks unaffordable)
+
+  Late Phase — top buys: Smithy > Laboratory > Council Room > Estate
+  ────────────────────────────────────────
+  Focus: action cards (Smithy, Laboratory, Council Room), then victory (Estate)
+  Stops buying after rank 14 (skips cheaper cards if top picks unaffordable)
+
+  Action Play Order
+  ────────────────────────────────────────
+  Festival > Chapel > Laboratory > Village > Council Room > Throne Room > Market > Moneylender > Smithy
+
+  Chapel Trashing
+  ────────────────────────────────────────
+  Never trashes (max 0)
+
+  Buy Targets (max copies)
+  ────────────────────────────────────────
+  Throne Room: 0, Village: 2, Laboratory: 1, Market: 10, Council Room: 4, Festival: 2, Smithy: 4, Moneylender: 10, Gardens: 10
+
+  Key Insight
+  ────────────────────────────────────────
+  Builds an engine early with action cards, then
+  waits until very late to buy victory cards (lean deck).
+
+  Average Final Deck
+  ────────────────────────────────────────
+        Copper  26.7  ███████████████████████████
+        Silver  19.3  ███████████████████
+       Gardens   7.6  ████████
+         Duchy   6.1  ██████
+  Council Room   4.0  ████
+      Province   3.2  ███
+        Estate   3.0  ███
+      Festival   1.8  ██
+         Total  71.7
+
+============================================================

@@ -1,0 +1,113 @@
+{
+  "early_buy_priority": [
+    "Festival",
+    "Silver",
+    "Gardens",
+    "Throne Room",
+    "Moneylender",
+    "PASS",
+    "Council Room",
+    "Estate",
+    "Copper",
+    "Village",
+    "Market",
+    "Chapel",
+    "Laboratory",
+    "Province",
+    "Smithy",
+    "Duchy",
+    "Gold"
+  ],
+  "mid_buy_priority": [
+    "Council Room",
+    "Gardens",
+    "Province",
+    "Duchy",
+    "Silver",
+    "Copper",
+    "Smithy",
+    "Chapel",
+    "Moneylender",
+    "Gold",
+    "Festival",
+    "PASS",
+    "Throne Room",
+    "Market",
+    "Estate",
+    "Laboratory",
+    "Village"
+  ],
+  "late_buy_priority": [
+    "Smithy",
+    "Laboratory",
+    "Council Room",
+    "Estate",
+    "Festival",
+    "Village",
+    "Province",
+    "Copper",
+    "Chapel",
+    "Moneylender",
+    "Silver",
+    "Gold",
+    "Throne Room",
+    "PASS",
+    "Gardens",
+    "Duchy",
+    "Market"
+  ],
+  "action_priority": [
+    "Festival",
+    "Chapel",
+    "Laboratory",
+    "Village",
+    "Council Room",
+    "Throne Room",
+    "Market",
+    "Moneylender",
+    "Smithy"
+  ],
+  "chapel_trash_priority": [
+    "Estate",
+    "Silver",
+    "Copper",
+    "Duchy",
+    "STOP"
+  ],
+  "transitions": {
+    "early_to_mid_turn": 5,
+    "mid_to_late_provinces": 0
+  },
+  "throne_room_priority": [
+    "Festival",
+    "Moneylender",
+    "Chapel",
+    "Laboratory",
+    "Market",
+    "Village",
+    "Council Room",
+    "Smithy"
+  ],
+  "chapel_max_trash": 0,
+  "buy_targets": {
+    "Throne Room": 0,
+    "Village": 2,
+    "Laboratory": 1,
+    "Market": 10,
+    "Council Room": 4,
+    "Festival": 2,
+    "Smithy": 4,
+    "Moneylender": 10,
+    "Gardens": 10
+  },
+  "avg_final_deck": {
+    "Copper": 26.7,
+    "Silver": 19.3,
+    "Gardens": 7.6,
+    "Duchy": 6.1,
+    "Council Room": 4.0,
+    "Province": 3.2,
+    "Estate": 3.0,
+    "Festival": 1.8
+  }
+}
