@@ -20,6 +20,7 @@ SEED            = 42
 KINGDOM         = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel"]
 OPPONENT_PATH   = "auto"  # "auto" = use best_model/strategy.json if it exists, None = Big Money
 SWITCH_AT       = 0.7  # Auto-switch opponent when win rate exceeds this
+WORKERS         = 8    # Parallel workers for evaluation (1 = sequential)
 
 
 def main():
@@ -38,6 +39,7 @@ def main():
     print(f"Population: {POP_SIZE}, Generations: {GENERATIONS}, "
           f"Games/eval: {GAMES_PER_EVAL}")
     print(f"Opponent: {opponent_label}")
+    print(f"Workers: {WORKERS}")
     print()
 
     config = {
@@ -52,6 +54,7 @@ def main():
         "opponent": opponent,
         "opponent_label": opponent_label,
         "switch_threshold": SWITCH_AT,
+        "workers": WORKERS,
         "csv_path": "evolution_log.csv",
     }
 

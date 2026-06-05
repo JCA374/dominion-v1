@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import random
 import statistics
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from typing import TYPE_CHECKING
 
 from engine import play_game, play_game_2p
@@ -71,6 +74,30 @@ def evaluate_vs_opponent(strategy: Strategy, seed_list: list[int],
         "loss_rate": (n - wins - ties) / n,
         "mean_turns": total_turns / n,
     }
+
+
+def _eval_one(strategy: Strategy, seed_list: list[int],
+              kingdom: list[str] | None, opponent: Strategy | None) -> dict:
+    """Evaluate a single strategy — top-level function for multiprocessing."""
+    return evaluate_vs_opponent(strategy, seed_list, kingdom, opponent=opponent)
+
+
+def evaluate_population(population: list[Strategy], seed_list: list[int],
+                        kingdom: list[str] | None = None,
+                        opponent: Strategy | None = None,
+                        workers: int = 1) -> list[dict]:
+    """Evaluate all strategies, optionally in parallel.
+
+    workers=1 means sequential, workers>1 uses a process pool.
+    """
+    if workers <= 1:
+        return [evaluate_vs_opponent(s, seed_list, kingdom, opponent=opponent)
+                for s in population]
+
+    fn = partial(_eval_one, seed_list=seed_list, kingdom=kingdom,
+                 opponent=opponent)
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(fn, population))
 
 
 # Backwards-compatible alias

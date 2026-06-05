@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import asdict
 
 from cards import BUYABLE_CARDS, ACTION_CARDS
-from fitness import evaluate, evaluate_vs_opponent, make_seed_list
+from fitness import evaluate, evaluate_vs_opponent, evaluate_population, make_seed_list
 from strategy import (
     Strategy, Transitions, random_strategy, big_money_strategy,
     engine_strategy, describe, get_current_phase, save_best_model,
@@ -181,6 +181,7 @@ def run_ga(config: dict) -> dict:
     opponent_label = config.get("opponent_label", "Big Money")
     switch_threshold = config.get("switch_threshold", 0.7)
     best_model_dir = config.get("best_model_dir", "best_model")
+    workers = config.get("workers", 1)
 
     master_rng = random.Random(seed)
     ga_rng = random.Random(master_rng.randint(0, 2**31))
@@ -207,9 +208,9 @@ def run_ga(config: dict) -> dict:
             seed_list = make_seed_list(games_per_eval, master_rng)
 
             # Evaluate all individuals via 2-player games against opponent
-            eval_results = [evaluate_vs_opponent(s, seed_list, kingdom,
-                                                 opponent=opponent)
-                            for s in population]
+            eval_results = evaluate_population(population, seed_list, kingdom,
+                                               opponent=opponent,
+                                               workers=workers)
             fitnesses = [r["win_rate"] for r in eval_results]
 
             # Stats
