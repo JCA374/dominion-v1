@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
 
-from cards import BUYABLE_CARDS
+from cards import BUYABLE_CARDS, ALL_CARDS
 
 if TYPE_CHECKING:
     from strategy import Strategy
@@ -87,6 +87,11 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
                 seen.add(card)
                 cards.append(card)
 
+    # Sort by cost (highest to lowest), PASS at bottom
+    non_pass = [c for c in cards if c != "PASS"]
+    non_pass.sort(key=lambda c: ALL_CARDS[c].cost, reverse=True)
+    cards = non_pass + (["PASS"] if "PASS" in seen else [])
+
     data = np.full((len(cards), 3), np.nan)
 
     for col, priority_list in enumerate(lists):
@@ -108,7 +113,8 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
         f"Late\n(≤{t.mid_to_late_provinces} prov left)",
     ])
     ax.set_yticks(range(len(cards)))
-    ax.set_yticklabels(cards)
+    ax.set_yticklabels([f"{c} ({ALL_CARDS[c].cost})" if c != "PASS" else "PASS"
+                        for c in cards])
 
     # Highlight PASS row with a different background
     if "PASS" in cards:

@@ -20,10 +20,10 @@ import random
 # === Config ===
 POP_SIZE        = 60 #60
 GENERATIONS     = 10000 #100
-GAMES_PER_EVAL  = 50 #50
-TOURNAMENT_SIZE = 4
+GAMES_PER_EVAL  = 80 #50
+TOURNAMENT_SIZE = 3
 ELITE_COUNT     = 2
-MUTATION_RATE   = 0.1
+MUTATION_RATE   = 0.18
 SEED            = 42
 # All available kingdom cards (12 total — a standard game uses 10)
 ALL_KINGDOM     = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
@@ -51,7 +51,8 @@ def _find_last_gen(model_dir: str = "best_model") -> int:
 
 
 def _build_continue_population(best: 'Strategy', pop_size: int,
-                               rng: random.Random) -> list['Strategy']:
+                               rng: random.Random,
+                               kingdom: list[str] | None = None) -> list['Strategy']:
     """Build a population seeded from the best model.
 
     Keeps the best strategy as elite, fills the rest with mutated variants
@@ -60,7 +61,7 @@ def _build_continue_population(best: 'Strategy', pop_size: int,
     population = [deepcopy(best)]
     for _ in range(pop_size - 1):
         # Higher mutation rate for initial diversity
-        child = mutate(deepcopy(best), rate=0.3, rng=rng)
+        child = mutate(deepcopy(best), rate=0.3, rng=rng, kingdom=kingdom)
         population.append(child)
     return population
 
@@ -92,7 +93,7 @@ def main():
         best = load_strategy("best_model/strategy.json")
         start_gen = _find_last_gen()
         rng = random.Random(SEED + start_gen)
-        initial_population = _build_continue_population(best, POP_SIZE, rng)
+        initial_population = _build_continue_population(best, POP_SIZE, rng, KINGDOM)
         # Use the best model as opponent
         opponent = best
         opponent_label = f"best_model (gen {start_gen})"

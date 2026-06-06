@@ -176,7 +176,8 @@ def _mutate_list(lst: list[str], rate: float, rng: random.Random,
     return lst
 
 
-def mutate(strategy: Strategy, rate: float, rng: random.Random) -> Strategy:
+def mutate(strategy: Strategy, rate: float, rng: random.Random,
+           kingdom: list[str] | None = None) -> Strategy:
     """Apply mutation to a strategy."""
     s = deepcopy(strategy)
     s.early_buy_priority = _mutate_list(s.early_buy_priority, rate, rng)
@@ -210,8 +211,9 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random) -> Strategy:
             s.buy_targets[card] = max(1, min(10, s.buy_targets[card]))
 
     # Occasionally add/remove a target for a kingdom card
+    kingdom_cards = kingdom if kingdom is not None else KINGDOM_CARDS
     if rng.random() < rate / 3:
-        card = rng.choice(KINGDOM_CARDS)
+        card = rng.choice(kingdom_cards)
         if card in s.buy_targets:
             del s.buy_targets[card]  # remove limit
         else:
@@ -256,6 +258,9 @@ def run_ga(config: dict) -> dict:
     overall_best_fitness = -1.0
     overall_best_strategy = None
     opponent_num = 1
+    stagnation_count = 0       # generations since last improvement
+    STAGNATION_THRESHOLD = 30  # boost mutation after this many stale generations
+    STAGNATION_INJECT = 5      # number of random strategies to inject
 
     csv_path = config.get("csv_path", "evolution_log.csv")
     csv_append = config.get("csv_append", False)
@@ -334,6 +339,9 @@ def run_ga(config: dict) -> dict:
             if new_best:
                 overall_best_fitness = best_fitness
                 overall_best_strategy = deepcopy(best_strat)
+                stagnation_count = 0
+            else:
+                stagnation_count += 1
 
             bm_info = ""
             if bm_results is not None:
@@ -385,17 +393,31 @@ def run_ga(config: dict) -> dict:
             if gen == start_gen + generations:
                 break
 
+            # --- Stagnation detection ---
+            stagnant = stagnation_count >= STAGNATION_THRESHOLD
+            effective_rate = min(mutation_rate * 2.5, 0.5) if stagnant else mutation_rate
+            if stagnant and stagnation_count % STAGNATION_THRESHOLD == 0:
+                print(f"  >>> Stagnation detected ({stagnation_count} gens), "
+                      f"boosting mutation to {effective_rate:.0%} + "
+                      f"injecting {STAGNATION_INJECT} randoms <<<")
+
             # --- Selection + reproduction ---
             # Sort by fitness for elitism
             ranked = sorted(range(pop_size), key=lambda i: fitnesses[i], reverse=True)
             elites = [deepcopy(population[ranked[i]]) for i in range(elite_count)]
 
             new_pop = list(elites)
+
+            # Inject random strategies during stagnation
+            if stagnant and stagnation_count % STAGNATION_THRESHOLD == 0:
+                for _ in range(STAGNATION_INJECT):
+                    new_pop.append(random_strategy(ga_rng, kingdom))
+
             while len(new_pop) < pop_size:
                 p1 = tournament_select(population, fitnesses, tournament_size, ga_rng)
                 p2 = tournament_select(population, fitnesses, tournament_size, ga_rng)
                 child = crossover(p1, p2, ga_rng)
-                child = mutate(child, mutation_rate, ga_rng)
+                child = mutate(child, effective_rate, ga_rng, kingdom)
                 new_pop.append(child)
 
             population = new_pop
