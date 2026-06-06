@@ -101,7 +101,12 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
     im = ax.imshow(data, cmap=cmap, aspect="auto", vmin=1, vmax=n_items)
 
     ax.set_xticks(range(3))
-    ax.set_xticklabels(["Early", "Mid", "Late"])
+    t = strategy.transitions
+    ax.set_xticklabels([
+        f"Early\n(turns 1–{t.early_to_mid_turn - 1})",
+        f"Mid\n(turn {t.early_to_mid_turn}+,\n>{t.mid_to_late_provinces} prov left)",
+        f"Late\n(≤{t.mid_to_late_provinces} prov left)",
+    ])
     ax.set_yticks(range(len(cards)))
     ax.set_yticklabels(cards)
 

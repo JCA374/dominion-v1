@@ -182,14 +182,16 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random) -> Strategy:
         s.chapel_max_trash += rng.choice([-1, 0, 1])
         s.chapel_max_trash = max(0, min(4, s.chapel_max_trash))
 
-    # Jitter transitions
+    # Jitter transitions (occasional large jumps to escape sticky boundaries)
     if rng.random() < rate:
-        s.transitions.early_to_mid_turn += rng.choice([-1, 0, 1])
+        delta = rng.choice([-3, -2, -1, -1, 0, 1, 1, 2, 3])
+        s.transitions.early_to_mid_turn += delta
         s.transitions.early_to_mid_turn = max(2, min(15, s.transitions.early_to_mid_turn))
 
     if rng.random() < rate:
-        s.transitions.mid_to_late_provinces += rng.choice([-1, 0, 1])
-        s.transitions.mid_to_late_provinces = max(0, min(8, s.transitions.mid_to_late_provinces))
+        delta = rng.choice([-3, -2, -1, -1, 0, 1, 1, 2, 3])
+        s.transitions.mid_to_late_provinces += delta
+        s.transitions.mid_to_late_provinces = max(2, min(8, s.transitions.mid_to_late_provinces))
 
     # Jitter buy targets
     for card in list(s.buy_targets):

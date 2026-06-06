@@ -13,7 +13,7 @@ from cards import BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS, TREASURE_CARDS
 @dataclass
 class Transitions:
     early_to_mid_turn: int       # range [2, 15]
-    mid_to_late_provinces: int   # range [0, 8]
+    mid_to_late_provinces: int   # range [2, 8]
 
 
 @dataclass
@@ -92,7 +92,7 @@ def random_strategy(rng: random.Random) -> Strategy:
         chapel_max_trash=rng.randint(0, 4),
         transitions=Transitions(
             early_to_mid_turn=rng.randint(2, 15),
-            mid_to_late_provinces=rng.randint(0, 8),
+            mid_to_late_provinces=rng.randint(2, 8),
         ),
         buy_targets=buy_targets,
     )
