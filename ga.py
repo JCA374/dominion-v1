@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import asdict
 
 from cards import BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS
-from fitness import evaluate, evaluate_vs_opponent, evaluate_population, make_seed_list
+from fitness import (evaluate_population_vs_hall, make_seed_list)
 from strategy import (
     Strategy, Transitions, random_strategy, big_money_strategy,
     engine_strategy, gardens_strategy, describe, get_current_phase,
@@ -120,10 +120,12 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
         early_buy_priority=order_crossover(p1.early_buy_priority, p2.early_buy_priority, rng),
         mid_buy_priority=order_crossover(p1.mid_buy_priority, p2.mid_buy_priority, rng),
         late_buy_priority=order_crossover(p1.late_buy_priority, p2.late_buy_priority, rng),
-        action_priority=order_crossover(p1.action_priority, p2.action_priority, rng),
-        chapel_trash_priority=order_crossover(
-            p1.chapel_trash_priority, p2.chapel_trash_priority, rng
-        ),
+        early_action_priority=order_crossover(p1.early_action_priority, p2.early_action_priority, rng),
+        mid_action_priority=order_crossover(p1.mid_action_priority, p2.mid_action_priority, rng),
+        late_action_priority=order_crossover(p1.late_action_priority, p2.late_action_priority, rng),
+        early_chapel_trash=order_crossover(p1.early_chapel_trash, p2.early_chapel_trash, rng),
+        mid_chapel_trash=order_crossover(p1.mid_chapel_trash, p2.mid_chapel_trash, rng),
+        late_chapel_trash=order_crossover(p1.late_chapel_trash, p2.late_chapel_trash, rng),
         throne_room_priority=order_crossover(
             p1.throne_room_priority, p2.throne_room_priority, rng
         ),
@@ -142,6 +144,8 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
             ]),
         ),
         buy_targets=_crossover_targets(p1.buy_targets, p2.buy_targets, rng),
+        province_max_coins=rng.choice([p1.province_max_coins, p2.province_max_coins]),
+        duchy_max_coins=rng.choice([p1.duchy_max_coins, p2.duchy_max_coins]),
     )
 
 
@@ -183,10 +187,14 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
     s.early_buy_priority = _mutate_list(s.early_buy_priority, rate, rng)
     s.mid_buy_priority = _mutate_list(s.mid_buy_priority, rate, rng)
     s.late_buy_priority = _mutate_list(s.late_buy_priority, rate, rng)
-    s.action_priority = _mutate_list(s.action_priority, rate, rng, allow_pass=False)
+    s.early_action_priority = _mutate_list(s.early_action_priority, rate, rng, allow_pass=False)
+    s.mid_action_priority = _mutate_list(s.mid_action_priority, rate, rng, allow_pass=False)
+    s.late_action_priority = _mutate_list(s.late_action_priority, rate, rng, allow_pass=False)
+    s.early_chapel_trash = _mutate_list(s.early_chapel_trash, rate, rng, allow_pass=False)
+    s.mid_chapel_trash = _mutate_list(s.mid_chapel_trash, rate, rng, allow_pass=False)
+    s.late_chapel_trash = _mutate_list(s.late_chapel_trash, rate, rng, allow_pass=False)
     s.throne_room_priority = _mutate_list(s.throne_room_priority, rate, rng, allow_pass=False)
     s.mine_trash_priority = _mutate_list(s.mine_trash_priority, rate, rng, allow_pass=False)
-    s.chapel_trash_priority = _mutate_list(s.chapel_trash_priority, rate, rng, allow_pass=False)
 
     # Jitter chapel_max_trash (min 1 so chapel always has selection pressure)
     if rng.random() < rate:
@@ -219,6 +227,14 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
         else:
             s.buy_targets[card] = rng.randint(1, 4)  # add limit
 
+    # Jitter coin thresholds for Province/Duchy
+    if rng.random() < rate:
+        s.province_max_coins += rng.choice([-1, 0, 1])
+        s.province_max_coins = max(8, min(18, s.province_max_coins))
+    if rng.random() < rate:
+        s.duchy_max_coins += rng.choice([-1, 0, 1])
+        s.duchy_max_coins = max(5, min(18, s.duchy_max_coins))
+
     return s
 
 
@@ -236,13 +252,10 @@ def run_ga(config: dict) -> dict:
     mutation_rate = config["mutation_rate"]
     kingdom = config.get("kingdom")
     seed = config["seed"]
-    opponent = config.get("opponent")
-    opponent_label = config.get("opponent_label", "Big Money")
-    switch_threshold = config.get("switch_threshold", 0.7)
-    bm_floor = config.get("bm_floor", 0.7)  # must beat Big Money at this rate to switch
-    bm_weight = config.get("bm_weight", 0.3)  # fraction of fitness from BM games
     best_model_dir = config.get("best_model_dir", "best_model")
     workers = config.get("workers", 1)
+    hall_max_size = config.get("hall_max_size", 6)
+    hall_add_threshold = config.get("hall_add_threshold", 0.55)
 
     start_gen = config.get("start_gen", 0)
     initial_population = config.get("initial_population")
@@ -254,10 +267,13 @@ def run_ga(config: dict) -> dict:
         population = initial_population
     else:
         population = init_population(pop_size, ga_rng, kingdom)
+
+    # Hall of fame: diverse set of opponents. Big Money is always present.
+    hall: list[Strategy] = config.get("hall", [big_money_strategy(kingdom)])
+
     log = []
     overall_best_fitness = -1.0
     overall_best_strategy = None
-    opponent_num = 1
     stagnation_count = 0       # generations since last improvement
     STAGNATION_THRESHOLD = 30  # boost mutation after this many stale generations
     STAGNATION_INJECT = 5      # number of random strategies to inject
@@ -279,25 +295,11 @@ def run_ga(config: dict) -> dict:
             # Generate seeds for this generation
             seed_list = make_seed_list(games_per_eval, master_rng)
 
-            # Evaluate all individuals via 2-player games against opponent
-            eval_results = evaluate_population(population, seed_list, kingdom,
-                                               opponent=opponent,
-                                               workers=workers)
+            # Evaluate all individuals against the hall of fame
+            eval_results = evaluate_population_vs_hall(
+                population, seed_list, kingdom, hall=hall, workers=workers)
 
-            # Mixed fitness: blend opponent win rate with Big Money win rate
-            if bm_weight > 0 and opponent is not None:
-                bm_seed_list = make_seed_list(
-                    max(4, int(games_per_eval * bm_weight / (1 - bm_weight))),
-                    master_rng)
-                bm_results = evaluate_population(population, bm_seed_list, kingdom,
-                                                  opponent=None, workers=workers)
-                fitnesses = [
-                    (1 - bm_weight) * r["win_rate"] + bm_weight * bm["win_rate"]
-                    for r, bm in zip(eval_results, bm_results)
-                ]
-            else:
-                bm_results = None
-                fitnesses = [r["win_rate"] for r in eval_results]
+            fitnesses = [r["win_rate"] for r in eval_results]
 
             # Stats
             best_idx = max(range(pop_size), key=lambda i: fitnesses[i])
@@ -343,17 +345,13 @@ def run_ga(config: dict) -> dict:
             else:
                 stagnation_count += 1
 
-            bm_info = ""
-            if bm_results is not None:
-                best_bm_wr = bm_results[best_idx]["win_rate"]
-                best_opp_wr = eval_results[best_idx]["win_rate"]
-                bm_info = f"  opp={best_opp_wr:4.0%} bm={best_bm_wr:4.0%}"
             line = (f"Gen {gen:3d} | best={best_fitness:5.0%}  mean={mean_fitness:5.0%}"
-                    f"  worst={worst_fitness:5.0%}{bm_info} | turns={best_turns:4.1f}"
+                    f"  worst={worst_fitness:5.0%} | turns={best_turns:4.1f}"
+                    f" | hall={len(hall)}"
                     f" | early→mid t{best_strat.transitions.early_to_mid_turn}"
                     f"  mid→late p{best_strat.transitions.mid_to_late_provinces}")
             if new_best:
-                line += f"  *** new best vs {opponent_label} ***"
+                line += "  *** new best ***"
             print(line)
 
             # Save best model to disk whenever we find a new best
@@ -363,31 +361,24 @@ def run_ga(config: dict) -> dict:
                             "loss_rate": eval_results[best_idx]["loss_rate"],
                             "mean_turns": best_turns,
                             "num_games": games_per_eval * 2,
-                            "opponent": opponent_label,
+                            "opponent": f"hall({len(hall)})",
                             "avg_final_deck": eval_results[best_idx].get("avg_final_deck")}
                 gen_dir = os.path.join(best_model_dir, f"gen_{gen:03d}")
                 save_best_model(best_strat, vs_stats, output_dir=gen_dir)
                 # Also save as "latest" for easy access
                 save_best_model(best_strat, vs_stats, output_dir=best_model_dir)
 
-            # Switch opponent when win rate is high enough
-            # but only if the candidate still beats Big Money (prevents drift)
-            if (new_best and best_fitness >= switch_threshold
+            # Add to hall of fame when win rate exceeds threshold
+            if (new_best and best_fitness >= hall_add_threshold
                     and gen < start_gen + generations):
-                bm_check = evaluate_vs_opponent(
-                    overall_best_strategy, seed_list, kingdom, opponent=None)
-                bm_wr = bm_check["win_rate"]
-                if bm_wr >= bm_floor:
-                    opponent = deepcopy(overall_best_strategy)
-                    opponent_num += 1
-                    opponent_label = f"best_model_v{opponent_num}"
-                    overall_best_fitness = -1.0
-                    print(f"  >>> Opponent switched to {opponent_label} "
-                          f"(won {best_fitness:.0%} vs previous, "
-                          f"{bm_wr:.0%} vs Big Money) <<<")
-                else:
-                    print(f"  >>> Switch blocked: only {bm_wr:.0%} vs Big Money "
-                          f"(need {bm_floor:.0%}) <<<")
+                new_member = deepcopy(overall_best_strategy)
+                hall.append(new_member)
+                if len(hall) > hall_max_size:
+                    # Remove oldest non-BM member (index 1, since 0 is Big Money)
+                    hall.pop(1)
+                overall_best_fitness = -1.0  # reset so GA keeps improving vs new hall
+                print(f"  >>> Added to hall of fame (hall={len(hall)}, "
+                      f"win_rate={best_fitness:.0%}) <<<")
 
             # Don't evolve after the last generation
             if gen == start_gen + generations:
@@ -432,6 +423,5 @@ def run_ga(config: dict) -> dict:
         "log": log,
         "population": population,
         "fitnesses": fitnesses,
-        "opponent": opponent,
-        "opponent_label": opponent_label,
+        "hall": hall,
     }

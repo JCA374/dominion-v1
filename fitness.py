@@ -108,5 +108,67 @@ def evaluate_population(population: list[Strategy], seed_list: list[int],
         return list(pool.map(fn, population))
 
 
+def evaluate_vs_hall(strategy: Strategy, seed_list: list[int],
+                     hall: list[Strategy],
+                     kingdom: list[str] | None = None) -> dict:
+    """Evaluate strategy against each hall member, return averaged stats.
+
+    Divides seeds across hall members so total game count stays manageable.
+    """
+    if not hall:
+        return evaluate_vs_opponent(strategy, seed_list, kingdom, opponent=None)
+
+    # Divide seeds among hall members (min 4 per opponent)
+    seeds_per_opp = max(4, len(seed_list) // len(hall))
+
+    all_results = []
+    for i, opponent in enumerate(hall):
+        # Use a slice of seeds for this opponent
+        start = (i * seeds_per_opp) % len(seed_list)
+        opp_seeds = seed_list[start:start + seeds_per_opp]
+        if len(opp_seeds) < seeds_per_opp:
+            opp_seeds += seed_list[:seeds_per_opp - len(opp_seeds)]
+        result = evaluate_vs_opponent(strategy, opp_seeds, kingdom, opponent=opponent)
+        all_results.append(result)
+
+    # Average across all opponents
+    avg_win = sum(r["win_rate"] for r in all_results) / len(all_results)
+    avg_tie = sum(r["tie_rate"] for r in all_results) / len(all_results)
+    avg_loss = sum(r["loss_rate"] for r in all_results) / len(all_results)
+    avg_turns = sum(r["mean_turns"] for r in all_results) / len(all_results)
+    return {
+        "win_rate": avg_win,
+        "tie_rate": avg_tie,
+        "loss_rate": avg_loss,
+        "mean_turns": avg_turns,
+        "avg_final_deck": all_results[0].get("avg_final_deck"),
+    }
+
+
+def _eval_one_vs_hall(strategy: Strategy, seed_list: list[int],
+                      kingdom: list[str] | None,
+                      hall: list[Strategy]) -> dict:
+    """Evaluate a single strategy vs hall — top-level for multiprocessing."""
+    return evaluate_vs_hall(strategy, seed_list, hall, kingdom)
+
+
+def evaluate_population_vs_hall(population: list[Strategy],
+                                seed_list: list[int],
+                                kingdom: list[str] | None = None,
+                                hall: list[Strategy] | None = None,
+                                workers: int = 1) -> list[dict]:
+    """Evaluate all strategies against a hall of fame, optionally in parallel."""
+    if not hall:
+        return evaluate_population(population, seed_list, kingdom, workers=workers)
+
+    if workers <= 1:
+        return [evaluate_vs_hall(s, seed_list, hall, kingdom) for s in population]
+
+    fn = partial(_eval_one_vs_hall, seed_list=seed_list, kingdom=kingdom,
+                 hall=hall)
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(fn, population))
+
+
 # Backwards-compatible alias
 evaluate_vs_big_money = evaluate_vs_opponent

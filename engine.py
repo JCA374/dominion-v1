@@ -149,19 +149,23 @@ def trash_card(state: GameState, card_name: str) -> None:
 # ---------------------------------------------------------------------------
 
 def play_action_phase(state: GameState, strategy: Strategy) -> None:
-    """Play action cards from hand following action_priority while actions > 0."""
+    """Play action cards from hand following phase-specific action priority."""
+    from strategy import get_current_phase, get_action_priority
+    phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
+    action_priority = get_action_priority(strategy, phase)
+
     while state.actions > 0:
         played = False
-        for card_name in strategy.action_priority:
+        for card_name in action_priority:
             if card_name in state.hand and state.actions > 0:
                 resolve_action(state, card_name)
 
                 if ALL_CARDS[card_name].special == "chapel":
-                    play_chapel(state, strategy)
+                    play_chapel(state, strategy, phase)
                 elif ALL_CARDS[card_name].special == "moneylender":
                     play_moneylender(state)
                 elif ALL_CARDS[card_name].special == "throne_room":
-                    play_throne_room(state, strategy)
+                    play_throne_room(state, strategy, phase)
                 elif ALL_CARDS[card_name].special == "mine":
                     play_mine(state, strategy)
 
@@ -203,7 +207,8 @@ def play_mine(state: GameState, strategy: Strategy) -> tuple[str, str] | None:
     return None
 
 
-def play_throne_room(state: GameState, strategy: Strategy) -> str | None:
+def play_throne_room(state: GameState, strategy: Strategy,
+                     phase: str = "mid") -> str | None:
     """Choose the best action from hand and play it twice.
 
     Uses strategy.throne_room_priority to pick the target.
@@ -227,7 +232,7 @@ def play_throne_room(state: GameState, strategy: Strategy) -> str | None:
         apply_action_effects(state, target)
 
         if card.special == "chapel":
-            play_chapel(state, strategy)
+            play_chapel(state, strategy, phase)
         elif card.special == "moneylender":
             play_moneylender(state)
         elif card.special == "mine":
@@ -236,11 +241,14 @@ def play_throne_room(state: GameState, strategy: Strategy) -> str | None:
     return target
 
 
-def play_chapel(state: GameState, strategy: Strategy) -> None:
-    """Trash up to chapel_max_trash cards from hand following chapel_trash_priority."""
+def play_chapel(state: GameState, strategy: Strategy,
+                phase: str = "early") -> None:
+    """Trash up to chapel_max_trash cards from hand following phase-specific trash priority."""
+    from strategy import get_chapel_trash_priority
+    chapel_trash_priority = get_chapel_trash_priority(strategy, phase)
     max_trash = min(strategy.chapel_max_trash, 4)
     trashed = 0
-    for card_name in strategy.chapel_trash_priority:
+    for card_name in chapel_trash_priority:
         if card_name == "STOP" or trashed >= max_trash:
             break
         while card_name in state.hand and trashed < max_trash:
@@ -276,6 +284,11 @@ def play_buy_phase(state: GameState, strategy: Strategy) -> None:
             if (card_name in state.supply
                     and state.supply[card_name] > 0
                     and ALL_CARDS[card_name].cost <= state.coins):
+                # Coin threshold check: skip if we have too many coins
+                if card_name == "Province" and state.coins > strategy.province_max_coins:
+                    continue
+                if card_name == "Duchy" and state.coins > strategy.duchy_max_coins:
+                    continue
                 # Check buy target limit
                 if card_name in buy_targets:
                     if owned.get(card_name, 0) >= buy_targets[card_name]:

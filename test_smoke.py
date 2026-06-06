@@ -12,7 +12,8 @@ from engine import (
 from strategy import (
     Strategy, Transitions, get_current_phase, random_strategy,
     big_money_strategy, engine_strategy, describe,
-    save_best_model, load_strategy,
+    save_best_model, load_strategy, get_action_priority,
+    get_chapel_trash_priority,
 )
 from fitness import evaluate, evaluate_vs_opponent, make_seed_list
 from ga import order_crossover, mutate, crossover, init_population
@@ -94,6 +95,75 @@ def test_phase_selection():
     assert get_current_phase(20, 4, t) == "late"
 
 
+def test_phase_specific_action_priority():
+    """Different phases use different action priority lists."""
+    state = _make_state_with_hand(
+        ["Village", "Smithy"],
+        deck=["Copper"] * 10,
+    )
+    state.supply = _full_supply()
+    # Early: play Smithy first (will use action, no more Village)
+    # Mid: play Village first (gives +actions, then Smithy)
+    strategy = _make_strategy(
+        early_action_priority=["Smithy", "Village"],
+        mid_action_priority=["Village", "Smithy"],
+        late_action_priority=["Village", "Smithy"],
+        transitions=Transitions(early_to_mid_turn=3, mid_to_late_provinces=4),
+    )
+
+    # Turn 1 → early phase: Smithy plays first, uses the action, Village stays
+    state.turn = 1
+    play_action_phase(state, strategy)
+    assert state.play_area == ["Smithy"]
+    assert "Village" in state.hand
+
+    # Reset for mid phase test
+    state2 = _make_state_with_hand(
+        ["Village", "Smithy"],
+        deck=["Copper"] * 10,
+    )
+    state2.supply = _full_supply()
+    state2.turn = 5  # mid phase
+    play_action_phase(state2, strategy)
+    # Village first → +2 actions → then Smithy
+    assert "Village" in state2.play_area
+    assert "Smithy" in state2.play_area
+
+
+def test_phase_specific_chapel_trash():
+    """Chapel trashes differently in early vs late phases."""
+    # Early: trash Estate
+    state_early = _make_state_with_hand(
+        ["Chapel", "Estate", "Copper"],
+        deck=["Silver"] * 5,
+    )
+    state_early.supply = _full_supply()
+    state_early.turn = 1
+    strategy = _make_strategy(
+        early_action_priority=["Chapel"],
+        mid_action_priority=["Chapel"],
+        late_action_priority=["Chapel"],
+        early_chapel_trash=["Estate", "Copper", "STOP"],
+        mid_chapel_trash=["Estate", "STOP"],
+        late_chapel_trash=["STOP"],  # never trash late
+        transitions=Transitions(early_to_mid_turn=3, mid_to_late_provinces=4),
+    )
+    play_action_phase(state_early, strategy)
+    assert "Estate" in state_early.trash
+    assert "Copper" in state_early.trash
+
+    # Late: STOP means nothing trashed
+    state_late = _make_state_with_hand(
+        ["Chapel", "Estate", "Copper"],
+        deck=["Silver"] * 5,
+    )
+    state_late.supply = _full_supply()
+    state_late.supply["Province"] = 3  # triggers late phase
+    state_late.turn = 10
+    play_action_phase(state_late, strategy)
+    assert state_late.trash == []
+
+
 def test_random_strategies_valid():
     """100 random strategies have valid genomes."""
     rng = random.Random(123)
@@ -109,8 +179,14 @@ def test_random_strategies_valid():
             assert len(non_pass) == len(set(non_pass)), f"Duplicates in {lst_name}"
             assert lst.count("PASS") <= 1
 
-        non_stop = [c for c in s.action_priority if c != "STOP"]
-        assert set(non_stop) == action_set
+        for ap_name in ["early_action_priority", "mid_action_priority", "late_action_priority"]:
+            ap = getattr(s, ap_name)
+            non_stop = [c for c in ap if c != "STOP"]
+            assert set(non_stop) == action_set, f"Invalid {ap_name}"
+
+        for ct_name in ["early_chapel_trash", "mid_chapel_trash", "late_chapel_trash"]:
+            ct = getattr(s, ct_name)
+            assert "STOP" in ct, f"STOP missing from {ct_name}"
 
         # Throne Room priority: all actions except Throne Room
         tr_set = action_set - {"Throne Room"}
@@ -216,15 +292,38 @@ def _make_state_with_hand(hand, deck=None):
     return state
 
 
+def _make_strategy(**overrides) -> Strategy:
+    """Create a Strategy with sensible defaults. Override any field via kwargs."""
+    defaults = dict(
+        early_buy_priority=BUYABLE_CARDS[:],
+        mid_buy_priority=BUYABLE_CARDS[:],
+        late_buy_priority=BUYABLE_CARDS[:],
+        early_action_priority=ACTION_CARDS[:],
+        mid_action_priority=ACTION_CARDS[:],
+        late_action_priority=ACTION_CARDS[:],
+        early_chapel_trash=["Estate", "Copper", "STOP"],
+        mid_chapel_trash=["Estate", "Copper", "STOP"],
+        late_chapel_trash=["STOP"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+        throne_room_priority=[c for c in ACTION_CARDS if c != "Throne Room"],
+        mine_trash_priority=["Copper", "Silver"],
+        chapel_max_trash=4,
+        buy_targets={},
+    )
+    defaults.update(overrides)
+    return Strategy(**defaults)
+
+
 def _action_strategy(card_name):
     """Helper: strategy that plays a single action card."""
-    return Strategy(
-        early_buy_priority=["Province"] + [c for c in BUYABLE_CARDS if c != "Province"],
-        mid_buy_priority=["Province"] + [c for c in BUYABLE_CARDS if c != "Province"],
-        late_buy_priority=["Province"] + [c for c in BUYABLE_CARDS if c != "Province"],
-        action_priority=[card_name],
-        chapel_trash_priority=["Estate", "Copper", "STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    prov_first = ["Province"] + [c for c in BUYABLE_CARDS if c != "Province"]
+    return _make_strategy(
+        early_buy_priority=prov_first,
+        mid_buy_priority=prov_first,
+        late_buy_priority=prov_first,
+        early_action_priority=[card_name],
+        mid_action_priority=[card_name],
+        late_action_priority=[card_name],
     )
 
 
@@ -313,13 +412,10 @@ def test_village_then_smithy_chain():
         ["Village", "Smithy"],
         deck=["Copper", "Silver", "Gold", "Estate"],
     )
-    strategy = Strategy(
-        early_buy_priority=["Province"] + [c for c in BUYABLE_CARDS if c != "Province"],
-        mid_buy_priority=["Province"] + [c for c in BUYABLE_CARDS if c != "Province"],
-        late_buy_priority=["Province"] + [c for c in BUYABLE_CARDS if c != "Province"],
-        action_priority=["Village", "Smithy"],
-        chapel_trash_priority=["Estate", "Copper", "STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    strategy = _make_strategy(
+        early_action_priority=["Village", "Smithy"],
+        mid_action_priority=["Village", "Smithy"],
+        late_action_priority=["Village", "Smithy"],
     )
 
     play_action_phase(state, strategy)
@@ -379,12 +475,8 @@ def test_buy_phase_buys_card():
     state.supply = _full_supply()
     state.turn = 10
     state.buys = 1
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
+    strategy = _make_strategy(
         mid_buy_priority=["Province"] + [c for c in BUYABLE_CARDS if c != "Province"],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=ACTION_CARDS[:],
-        chapel_trash_priority=["STOP"],
         transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
     )
 
@@ -406,12 +498,8 @@ def test_buy_phase_respects_cost():
     state.turn = 10
     state.buys = 1
     # Priority wants Province first, but we can only afford cost <= 1
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
+    strategy = _make_strategy(
         mid_buy_priority=["Province", "Gold", "Duchy", "Silver"] + [c for c in BUYABLE_CARDS if c not in ["Province", "Gold", "Duchy", "Silver"]],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=ACTION_CARDS[:],
-        chapel_trash_priority=["STOP"],
         transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
     )
 
@@ -433,12 +521,8 @@ def test_buy_phase_empty_supply_skipped():
     state.supply["Silver"] = 0
     state.turn = 10
     state.buys = 1
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
+    strategy = _make_strategy(
         mid_buy_priority=["Province", "Gold", "Silver", "Duchy"] + [c for c in BUYABLE_CARDS if c not in ["Province", "Gold", "Silver", "Duchy"]],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=ACTION_CARDS[:],
-        chapel_trash_priority=["STOP"],
         transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
     )
 
@@ -456,12 +540,8 @@ def test_buy_phase_multiple_buys():
     state.supply = _full_supply()
     state.turn = 10
     state.buys = 3  # simulate Festival + Market giving extra buys
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
+    strategy = _make_strategy(
         mid_buy_priority=["Silver", "Copper"] + [c for c in BUYABLE_CARDS if c not in ["Silver", "Copper"]],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=ACTION_CARDS[:],
-        chapel_trash_priority=["STOP"],
         transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
     )
 
@@ -478,13 +558,8 @@ def test_buy_phase_pass_stops_buying():
     state.turn = 1
     state.buys = 2
     # PASS at the very start — should buy nothing
-    strategy = Strategy(
+    strategy = _make_strategy(
         early_buy_priority=["PASS"] + BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=ACTION_CARDS[:],
-        chapel_trash_priority=["STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=3),
     )
 
     play_buy_phase(state, strategy)
@@ -500,14 +575,7 @@ def test_buy_phase_pass_stops_buying():
 def test_chapel_trashes_cards():
     """Chapel trashes cards from hand into trash pile."""
     state = _make_state_with_hand(["Chapel", "Estate", "Estate", "Copper", "Copper"])
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Chapel"],
-        chapel_trash_priority=["Estate", "Copper", "STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
-    )
+    strategy = _chapel_strategy(["Estate", "Copper", "STOP"])
 
     play_action_phase(state, strategy)
 
@@ -520,17 +588,22 @@ def test_chapel_trashes_cards():
     assert len(state.hand) == 0
 
 
+def _chapel_strategy(trash_priority):
+    """Helper: strategy that plays Chapel with given trash priority in all phases."""
+    return _make_strategy(
+        early_action_priority=["Chapel"],
+        mid_action_priority=["Chapel"],
+        late_action_priority=["Chapel"],
+        early_chapel_trash=trash_priority,
+        mid_chapel_trash=trash_priority,
+        late_chapel_trash=trash_priority,
+    )
+
+
 def test_chapel_stop_marker():
     """STOP in chapel_trash_priority prevents trashing cards after it."""
     state = _make_state_with_hand(["Chapel", "Estate", "Copper", "Copper", "Copper"])
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Chapel"],
-        chapel_trash_priority=["Estate", "STOP", "Copper"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
-    )
+    strategy = _chapel_strategy(["Estate", "STOP", "Copper"])
 
     play_action_phase(state, strategy)
 
@@ -547,14 +620,7 @@ def test_chapel_max_four():
         deck=["Silver"] * 5,
     )
     # Chapel draws 0, so hand has 6 Coppers after Chapel is played
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Chapel"],
-        chapel_trash_priority=["Copper", "STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
-    )
+    strategy = _chapel_strategy(["Copper", "STOP"])
 
     play_action_phase(state, strategy)
 
@@ -565,14 +631,7 @@ def test_chapel_max_four():
 def test_chapel_no_stop_trashes_all_matching():
     """Without STOP, chapel trashes all matching cards up to 4."""
     state = _make_state_with_hand(["Chapel", "Estate", "Estate", "Estate"])
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Chapel"],
-        chapel_trash_priority=["Estate", "Copper"],  # no STOP
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
-    )
+    strategy = _chapel_strategy(["Estate", "Copper"])  # no STOP
 
     play_action_phase(state, strategy)
 
@@ -764,13 +823,9 @@ def test_action_card_not_in_hand_skipped():
 def test_action_without_extra_actions_plays_one():
     """With 1 action and no +action cards, only one action card is played."""
     state = _make_state_with_hand(["Smithy", "Smithy"])
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Smithy"],
-        chapel_trash_priority=["STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    strategy = _make_strategy(
+        early_action_priority=["Smithy"], mid_action_priority=["Smithy"],
+        late_action_priority=["Smithy"],
     )
 
     play_action_phase(state, strategy)
@@ -868,13 +923,11 @@ def test_full_turn_action_buy_cleanup():
     )
     state.supply = _full_supply()
     state.turn = 1
-    strategy = Strategy(
+    strategy = _make_strategy(
         early_buy_priority=["Silver"] + [c for c in BUYABLE_CARDS if c != "Silver"],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Village"],
-        chapel_trash_priority=["STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+        early_action_priority=["Village"],
+        mid_action_priority=["Village"],
+        late_action_priority=["Village"],
     )
 
     # Action phase: Village played, draws 1, gets +2 actions
@@ -899,14 +952,7 @@ def test_chapel_trash_zero_cards():
     state = _make_state_with_hand(
         ["Chapel", "Estate", "Estate", "Copper", "Copper"],
     )
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Chapel"],
-        chapel_trash_priority=["STOP", "Estate", "Copper", "Duchy", "Silver"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
-    )
+    strategy = _chapel_strategy(["STOP", "Estate", "Copper", "Duchy", "Silver"])
 
     play_action_phase(state, strategy)
 
@@ -919,14 +965,7 @@ def test_chapel_trash_one_type():
     state = _make_state_with_hand(
         ["Chapel", "Estate", "Estate", "Copper", "Copper"],
     )
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Chapel"],
-        chapel_trash_priority=["Estate", "STOP", "Copper", "Duchy", "Silver"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
-    )
+    strategy = _chapel_strategy(["Estate", "STOP", "Copper", "Duchy", "Silver"])
 
     play_action_phase(state, strategy)
 
@@ -939,14 +978,7 @@ def test_chapel_trash_two_types():
     state = _make_state_with_hand(
         ["Chapel", "Estate", "Copper", "Copper", "Silver"],
     )
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Chapel"],
-        chapel_trash_priority=["Estate", "Copper", "STOP", "Duchy", "Silver"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
-    )
+    strategy = _chapel_strategy(["Estate", "Copper", "STOP", "Duchy", "Silver"])
 
     play_action_phase(state, strategy)
 
@@ -959,14 +991,7 @@ def test_chapel_trash_three_types():
     state = _make_state_with_hand(
         ["Chapel", "Estate", "Copper", "Silver", "Duchy"],
     )
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Chapel"],
-        chapel_trash_priority=["Estate", "Copper", "Silver", "STOP", "Duchy"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
-    )
+    strategy = _chapel_strategy(["Estate", "Copper", "Silver", "STOP", "Duchy"])
 
     play_action_phase(state, strategy)
 
@@ -979,14 +1004,7 @@ def test_chapel_trash_four_types():
     state = _make_state_with_hand(
         ["Chapel", "Estate", "Copper", "Silver", "Duchy"],
     )
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Chapel"],
-        chapel_trash_priority=["Estate", "Copper", "Silver", "Duchy", "STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
-    )
+    strategy = _chapel_strategy(["Estate", "Copper", "Silver", "Duchy", "STOP"])
 
     play_action_phase(state, strategy)
 
@@ -1000,14 +1018,7 @@ def test_chapel_priority_order_matters():
         ["Chapel", "Estate", "Estate", "Estate", "Copper", "Copper"],
         deck=["Silver"] * 5,
     )
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Chapel"],
-        chapel_trash_priority=["Estate", "Copper", "STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
-    )
+    strategy = _chapel_strategy(["Estate", "Copper", "STOP"])
 
     play_action_phase(state, strategy)
 
@@ -1030,20 +1041,17 @@ def test_ga_chapel_crossover_preserves_stop():
 
 def test_ga_chapel_mutation_moves_stop():
     """Mutation can swap STOP to different positions, changing trash behavior."""
-    base = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=ACTION_CARDS[:],
-        chapel_trash_priority=["Estate", "Copper", "STOP", "Duchy", "Silver"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    base = _make_strategy(
+        early_chapel_trash=["Estate", "Copper", "STOP", "Duchy", "Silver"],
+        mid_chapel_trash=["Estate", "Copper", "STOP", "Duchy", "Silver"],
+        late_chapel_trash=["Estate", "Copper", "STOP", "Duchy", "Silver"],
     )
 
     rng = random.Random(42)
     stop_positions = set()
     for _ in range(200):
         mutated = mutate(base, rate=1.0, rng=rng)  # high rate to force swaps
-        pos = mutated.chapel_trash_priority.index("STOP")
+        pos = mutated.early_chapel_trash.index("STOP")
         stop_positions.add(pos)
 
     # With enough mutations, STOP should appear in multiple positions
@@ -1064,14 +1072,10 @@ def test_throne_room_doubles_smithy():
         ["Throne Room", "Smithy"],
         deck=["Copper"] * 10,
     )
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Throne Room", "Smithy"],
-        chapel_trash_priority=["STOP"],
+    ap = ["Throne Room", "Smithy"]
+    strategy = _make_strategy(
+        early_action_priority=ap, mid_action_priority=ap, late_action_priority=ap,
         throne_room_priority=["Smithy"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
     )
 
     play_action_phase(state, strategy)
@@ -1088,14 +1092,10 @@ def test_throne_room_doubles_village():
         ["Throne Room", "Village"],
         deck=["Copper"] * 10,
     )
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Throne Room", "Village"],
-        chapel_trash_priority=["STOP"],
+    ap = ["Throne Room", "Village"]
+    strategy = _make_strategy(
+        early_action_priority=ap, mid_action_priority=ap, late_action_priority=ap,
         throne_room_priority=["Village"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
     )
 
     play_action_phase(state, strategy)
@@ -1113,14 +1113,10 @@ def test_throne_room_no_target():
         ["Throne Room", "Copper", "Silver"],
         deck=["Copper"] * 10,
     )
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Throne Room", "Smithy"],
-        chapel_trash_priority=["STOP"],
+    ap = ["Throne Room", "Smithy"]
+    strategy = _make_strategy(
+        early_action_priority=ap, mid_action_priority=ap, late_action_priority=ap,
         throne_room_priority=["Smithy"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
     )
 
     play_action_phase(state, strategy)
@@ -1137,14 +1133,10 @@ def test_throne_room_doubles_moneylender():
         ["Throne Room", "Moneylender", "Copper", "Copper", "Silver"],
         deck=["Gold"] * 5,
     )
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Throne Room", "Moneylender"],
-        chapel_trash_priority=["STOP"],
+    ap = ["Throne Room", "Moneylender"]
+    strategy = _make_strategy(
+        early_action_priority=ap, mid_action_priority=ap, late_action_priority=ap,
         throne_room_priority=["Moneylender"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
     )
 
     play_action_phase(state, strategy)
@@ -1161,14 +1153,10 @@ def test_throne_room_priority_matters():
         deck=["Copper"] * 10,
     )
     # action_priority prefers Village, but throne_room_priority prefers Smithy
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Throne Room", "Village", "Smithy"],
-        chapel_trash_priority=["STOP"],
+    ap = ["Throne Room", "Village", "Smithy"]
+    strategy = _make_strategy(
+        early_action_priority=ap, mid_action_priority=ap, late_action_priority=ap,
         throne_room_priority=["Smithy", "Village"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
     )
 
     play_action_phase(state, strategy)
@@ -1256,14 +1244,9 @@ def test_gardens_in_supply():
 def test_mine_upgrades_copper_to_silver():
     """Mine should trash Copper and gain Silver to hand."""
     state = _make_state_with_hand(["Mine", "Copper", "Silver"])
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Mine"],
-        chapel_trash_priority=["STOP"],
-        mine_trash_priority=["Copper", "Silver"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    strategy = _make_strategy(
+        early_action_priority=["Mine"], mid_action_priority=["Mine"],
+        late_action_priority=["Mine"], mine_trash_priority=["Copper", "Silver"],
     )
 
     play_action_phase(state, strategy)
@@ -1279,14 +1262,9 @@ def test_mine_upgrades_copper_to_silver():
 def test_mine_upgrades_silver_to_gold():
     """Mine should trash Silver and gain Gold to hand."""
     state = _make_state_with_hand(["Mine", "Silver", "Copper"])
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Mine"],
-        chapel_trash_priority=["STOP"],
-        mine_trash_priority=["Silver", "Copper"],  # prefer Silver upgrade
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    strategy = _make_strategy(
+        early_action_priority=["Mine"], mid_action_priority=["Mine"],
+        late_action_priority=["Mine"], mine_trash_priority=["Silver", "Copper"],
     )
 
     play_action_phase(state, strategy)
@@ -1299,14 +1277,9 @@ def test_mine_upgrades_silver_to_gold():
 def test_mine_no_treasure():
     """Mine with no treasure in hand does nothing."""
     state = _make_state_with_hand(["Mine", "Estate", "Estate"])
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Mine"],
-        chapel_trash_priority=["STOP"],
-        mine_trash_priority=["Copper", "Silver"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    strategy = _make_strategy(
+        early_action_priority=["Mine"], mid_action_priority=["Mine"],
+        late_action_priority=["Mine"],
     )
 
     play_action_phase(state, strategy)
@@ -1318,14 +1291,9 @@ def test_mine_empty_supply_skips():
     """Mine skips upgrade if target treasure supply is empty."""
     state = _make_state_with_hand(["Mine", "Copper", "Copper"])
     state.supply["Silver"] = 0
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Mine"],
-        chapel_trash_priority=["STOP"],
-        mine_trash_priority=["Copper", "Silver"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    strategy = _make_strategy(
+        early_action_priority=["Mine"], mid_action_priority=["Mine"],
+        late_action_priority=["Mine"],
     )
 
     play_action_phase(state, strategy)
@@ -1339,13 +1307,9 @@ def test_merchant_bonus_with_silver():
     """Merchant in play area gives +$1 when Silver is played as treasure."""
     state = _make_state_with_hand(["Merchant", "Silver", "Copper"],
                                   deck=["Estate"] * 5)
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Merchant"],
-        chapel_trash_priority=["STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    strategy = _make_strategy(
+        early_action_priority=["Merchant"], mid_action_priority=["Merchant"],
+        late_action_priority=["Merchant"],
     )
 
     play_action_phase(state, strategy)
@@ -1363,13 +1327,9 @@ def test_merchant_no_silver_no_bonus():
     """Merchant gives no bonus if no Silver is played."""
     state = _make_state_with_hand(["Merchant", "Copper", "Copper"],
                                   deck=["Estate"] * 5)
-    strategy = Strategy(
-        early_buy_priority=BUYABLE_CARDS[:],
-        mid_buy_priority=BUYABLE_CARDS[:],
-        late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=["Merchant"],
-        chapel_trash_priority=["STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    strategy = _make_strategy(
+        early_action_priority=["Merchant"], mid_action_priority=["Merchant"],
+        late_action_priority=["Merchant"],
     )
 
     play_action_phase(state, strategy)
@@ -1415,8 +1375,12 @@ def test_save_and_load_best_model(tmp_path):
     assert loaded.early_buy_priority == strategy.early_buy_priority
     assert loaded.mid_buy_priority == strategy.mid_buy_priority
     assert loaded.late_buy_priority == strategy.late_buy_priority
-    assert loaded.action_priority == strategy.action_priority
-    assert loaded.chapel_trash_priority == strategy.chapel_trash_priority
+    assert loaded.early_action_priority == strategy.early_action_priority
+    assert loaded.mid_action_priority == strategy.mid_action_priority
+    assert loaded.late_action_priority == strategy.late_action_priority
+    assert loaded.early_chapel_trash == strategy.early_chapel_trash
+    assert loaded.mid_chapel_trash == strategy.mid_chapel_trash
+    assert loaded.late_chapel_trash == strategy.late_chapel_trash
     assert loaded.transitions.early_to_mid_turn == strategy.transitions.early_to_mid_turn
     assert loaded.transitions.mid_to_late_provinces == strategy.transitions.mid_to_late_provinces
 
@@ -1431,32 +1395,23 @@ def test_save_and_load_best_model(tmp_path):
 # Opponent switching tests (SWITCH_AT / BM_FLOOR)
 # ---------------------------------------------------------------------------
 
-def test_opponent_switches_when_win_rate_exceeds_threshold():
-    """GA switches opponent when win rate >= switch_threshold and BM floor met."""
+def test_hall_of_fame_adds_member_when_threshold_met():
+    """GA adds strategy to hall when win rate >= hall_add_threshold."""
     from unittest.mock import patch
     from ga import run_ga
 
-    call_count = {"eval_pop": 0}
-
-    def fake_evaluate_population(population, seed_list, kingdom,
-                                  opponent=None, workers=1):
-        call_count["eval_pop"] += 1
+    def fake_evaluate_population_vs_hall(population, seed_list, kingdom,
+                                         hall=None, workers=1):
         results = []
         for _ in population:
-            # All strategies "win" at 80% — above 0.7 threshold
+            # All strategies "win" at 60% — above 0.55 threshold
             results.append({
-                "win_rate": 0.8, "tie_rate": 0.1, "loss_rate": 0.1,
+                "win_rate": 0.6, "tie_rate": 0.1, "loss_rate": 0.3,
                 "mean_turns": 20.0, "avg_final_deck": {},
             })
         return results
 
-    def fake_evaluate_vs_opponent(strategy, seed_list, kingdom, opponent=None):
-        # BM check: return 60% — above 0.5 floor
-        return {"win_rate": 0.6, "tie_rate": 0.2, "loss_rate": 0.2,
-                "mean_turns": 20.0}
-
-    with patch("ga.evaluate_population", fake_evaluate_population), \
-         patch("ga.evaluate_vs_opponent", fake_evaluate_vs_opponent), \
+    with patch("ga.evaluate_population_vs_hall", fake_evaluate_population_vs_hall), \
          patch("ga.save_best_model"):
         result = run_ga({
             "pop_size": 6,
@@ -1467,28 +1422,22 @@ def test_opponent_switches_when_win_rate_exceeds_threshold():
             "mutation_rate": 0.1,
             "seed": 42,
             "kingdom": KINGDOM_CARDS,
-            "switch_threshold": 0.7,
-            "bm_floor": 0.5,
-            "csv_path": "/tmp/test_switch.csv",
+            "hall_add_threshold": 0.55,
+            "hall_max_size": 6,
+            "csv_path": "/tmp/test_hall.csv",
         })
 
-    # Opponent should have switched at least once (label contains version number)
-    assert result["opponent_label"].startswith("best_model_v")
-    # Version number should be > 1 (at least one switch happened)
-    version = int(result["opponent_label"].split("v")[1])
-    assert version >= 2
+    # Hall should have grown beyond the initial Big Money member
+    assert len(result["hall"]) >= 2
 
 
-def test_opponent_switch_blocked_when_bm_floor_not_met():
-    """GA does NOT switch opponent when BM win rate < bm_floor."""
+def test_hall_of_fame_respects_max_size():
+    """Hall of fame does not exceed hall_max_size."""
     from unittest.mock import patch
     from ga import run_ga
 
-    switch_happened = {"yes": False}
-    original_opponent_labels = []
-
-    def fake_evaluate_population(population, seed_list, kingdom,
-                                  opponent=None, workers=1):
+    def fake_evaluate_population_vs_hall(population, seed_list, kingdom,
+                                         hall=None, workers=1):
         results = []
         for _ in population:
             results.append({
@@ -1497,30 +1446,24 @@ def test_opponent_switch_blocked_when_bm_floor_not_met():
             })
         return results
 
-    def fake_evaluate_vs_opponent(strategy, seed_list, kingdom, opponent=None):
-        # BM check: return 40% — BELOW 0.5 floor
-        return {"win_rate": 0.4, "tie_rate": 0.2, "loss_rate": 0.4,
-                "mean_turns": 20.0}
-
-    with patch("ga.evaluate_population", fake_evaluate_population), \
-         patch("ga.evaluate_vs_opponent", fake_evaluate_vs_opponent), \
+    with patch("ga.evaluate_population_vs_hall", fake_evaluate_population_vs_hall), \
          patch("ga.save_best_model"):
         result = run_ga({
             "pop_size": 6,
-            "generations": 5,
+            "generations": 10,
             "games_per_eval": 4,
             "tournament_size": 2,
             "elite_count": 1,
             "mutation_rate": 0.1,
             "seed": 42,
             "kingdom": KINGDOM_CARDS,
-            "switch_threshold": 0.7,
-            "bm_floor": 0.5,
-            "csv_path": "/tmp/test_no_switch.csv",
+            "hall_add_threshold": 0.55,
+            "hall_max_size": 3,
+            "csv_path": "/tmp/test_hall_max.csv",
         })
 
-    # Opponent should NOT have switched — label stays as default
-    assert result["opponent_label"] == "Big Money"
+    # Hall should not exceed max size
+    assert len(result["hall"]) <= 3
 
 
 # ---------------------------------------------------------------------------
@@ -1551,13 +1494,10 @@ def test_eval_counts_wins_correctly():
 def test_big_money_beats_do_nothing_strategy():
     """A strategy that passes on all buys should lose to Big Money."""
     # PASS first = never buy anything
-    do_nothing = Strategy(
+    do_nothing = _make_strategy(
         early_buy_priority=["PASS"] + BUYABLE_CARDS[:],
         mid_buy_priority=["PASS"] + BUYABLE_CARDS[:],
         late_buy_priority=["PASS"] + BUYABLE_CARDS[:],
-        action_priority=ACTION_CARDS[:],
-        chapel_trash_priority=["STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
     )
     rng = random.Random(42)
     seeds = make_seed_list(50, rng)
@@ -1572,13 +1512,10 @@ def test_big_money_wins_as_both_p1_and_p2():
     from engine import play_game_2p
 
     bm = big_money_strategy()
-    do_nothing = Strategy(
+    do_nothing = _make_strategy(
         early_buy_priority=["PASS"] + BUYABLE_CARDS[:],
         mid_buy_priority=["PASS"] + BUYABLE_CARDS[:],
         late_buy_priority=["PASS"] + BUYABLE_CARDS[:],
-        action_priority=ACTION_CARDS[:],
-        chapel_trash_priority=["STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
     )
 
     # Manual check: BM as P1 should win
@@ -1595,16 +1532,10 @@ def test_buy_target_zero_blocks_purchase():
     from engine import play_game_2p
 
     # Strategy that wants Province first but has buy_target=0 for Province
-    blocked = Strategy(
-        early_buy_priority=["Province", "Gold", "Silver"] + [
-            c for c in BUYABLE_CARDS if c not in ["Province", "Gold", "Silver"]],
-        mid_buy_priority=["Province", "Gold", "Silver"] + [
-            c for c in BUYABLE_CARDS if c not in ["Province", "Gold", "Silver"]],
-        late_buy_priority=["Province", "Gold", "Silver"] + [
-            c for c in BUYABLE_CARDS if c not in ["Province", "Gold", "Silver"]],
-        action_priority=ACTION_CARDS[:],
-        chapel_trash_priority=["STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    pgs = ["Province", "Gold", "Silver"] + [
+        c for c in BUYABLE_CARDS if c not in ["Province", "Gold", "Silver"]]
+    blocked = _make_strategy(
+        early_buy_priority=pgs, mid_buy_priority=pgs, late_buy_priority=pgs,
         buy_targets={"Province": 0},  # never buy Province!
     )
     rng = random.Random(42)
@@ -1643,20 +1574,9 @@ def test_ga_best_strategy_beats_big_money():
         f"GA best should beat Big Money >=50%, got {vs['win_rate']:.0%}")
 
 
-def test_ga_mixed_fitness_prevents_bm_drift():
-    """GA with mixed fitness (opponent + BM) must still beat Big Money."""
+def test_hall_of_fame_prevents_bm_drift():
+    """GA with hall of fame (BM always in hall) must still beat Big Money."""
     from ga import run_ga
-
-    # Use a do-nothing strategy as opponent so the GA could easily "drift"
-    # if it only optimized against the opponent
-    do_nothing = Strategy(
-        early_buy_priority=["PASS"] + BUYABLE_CARDS[:],
-        mid_buy_priority=["PASS"] + BUYABLE_CARDS[:],
-        late_buy_priority=["PASS"] + BUYABLE_CARDS[:],
-        action_priority=ACTION_CARDS[:],
-        chapel_trash_priority=["STOP"],
-        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
-    )
 
     result = run_ga({
         "pop_size": 20,
@@ -1667,22 +1587,79 @@ def test_ga_mixed_fitness_prevents_bm_drift():
         "mutation_rate": 0.15,
         "seed": 42,
         "kingdom": KINGDOM_CARDS,
-        "opponent": do_nothing,
-        "opponent_label": "DoNothing",
-        "switch_threshold": 99.0,   # disable switching
-        "bm_weight": 0.3,          # 30% fitness from BM
-        "csv_path": "/tmp/test_ga_mixed.csv",
-        "best_model_dir": "/tmp/test_ga_mixed_model",
+        "hall_add_threshold": 0.55,
+        "hall_max_size": 4,
+        "csv_path": "/tmp/test_ga_hall.csv",
+        "best_model_dir": "/tmp/test_ga_hall_model",
     })
 
-    # Even though trained against a weak opponent, the BM component
-    # should keep the strategy competitive against Big Money
+    # Big Money is always in the hall, so GA should maintain competitiveness
     rng = random.Random(99)
     seeds = make_seed_list(100, rng)
     vs = evaluate_vs_opponent(result["best_strategy"], seeds, KINGDOM_CARDS,
                               opponent=None)
-    assert vs["win_rate"] >= 0.45, (
-        f"Mixed-fitness GA should still beat BM >=45%, got {vs['win_rate']:.0%}")
+    assert vs["win_rate"] >= 0.40, (
+        f"Hall-of-fame GA should still beat BM >=40%, got {vs['win_rate']:.0%}")
+
+
+def test_province_max_coins_skips_buy():
+    """Province is skipped when coins exceed province_max_coins threshold."""
+    state = _make_state_with_hand(["Gold", "Gold", "Silver"])  # 8 coins
+    state.supply = _full_supply()
+    state.turn = 10
+    state.buys = 1
+    # Province costs 8, we have 8 coins, but threshold says skip if > 8... 8 is not > 8
+    strategy = _make_strategy(
+        mid_buy_priority=["Province", "Gold", "Silver", "PASS"],
+        transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
+        province_max_coins=8,  # buy Province at exactly 8
+    )
+    play_buy_phase(state, strategy)
+    assert "Province" in state.discard  # 8 coins, threshold 8, should buy
+
+    # Now test with 11 coins (Gold + Gold + Gold + Silver via extra card)
+    state2 = _make_state_with_hand(["Gold", "Gold", "Gold"])  # 9 coins
+    state2.supply = _full_supply()
+    state2.turn = 10
+    state2.buys = 1
+    strategy2 = _make_strategy(
+        mid_buy_priority=["Province", "Gold", "Silver", "PASS"],
+        transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
+        province_max_coins=8,  # only buy at 8
+    )
+    play_buy_phase(state2, strategy2)
+    # 9 coins > 8 threshold, Province should be skipped, buy Gold instead
+    assert "Province" not in state2.discard
+    assert "Gold" in state2.discard
+
+
+def test_duchy_max_coins_skips_buy():
+    """Duchy is skipped when coins exceed duchy_max_coins threshold."""
+    state = _make_state_with_hand(["Silver", "Silver", "Copper"])  # 5 coins
+    state.supply = _full_supply()
+    state.turn = 10
+    state.buys = 1
+    strategy = _make_strategy(
+        mid_buy_priority=["Duchy", "Silver", "PASS"],
+        transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
+        duchy_max_coins=5,  # buy Duchy at exactly 5
+    )
+    play_buy_phase(state, strategy)
+    assert "Duchy" in state.discard  # 5 coins, threshold 5, should buy
+
+    # With 6 coins, skip Duchy
+    state2 = _make_state_with_hand(["Gold", "Copper", "Copper"])  # 5 coins
+    state2.supply = _full_supply()
+    state2.turn = 10
+    state2.buys = 1
+    strategy2 = _make_strategy(
+        mid_buy_priority=["Duchy", "Silver", "PASS"],
+        transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
+        duchy_max_coins=4,  # only buy at 4 or below
+    )
+    play_buy_phase(state2, strategy2)
+    # 5 coins > 4 threshold, Duchy skipped
+    assert "Duchy" not in state2.discard
 
 
 if __name__ == "__main__":

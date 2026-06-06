@@ -13,7 +13,7 @@ from copy import deepcopy
 from ga import run_ga, mutate
 from strategy import describe, summarize, save_best_model, load_strategy, random_strategy
 from plotting import save_all_plots
-from fitness import evaluate_vs_opponent, make_seed_list
+from fitness import evaluate_vs_opponent, evaluate_vs_hall, make_seed_list
 import os
 import random
 
@@ -32,10 +32,8 @@ ALL_KINGDOM     = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Cha
 # Select 10 for training — change this list to train on different kingdoms
 KINGDOM         = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
                    "Throne Room", "Council Room", "Mine", "Moneylender"]
-OPPONENT_PATH   = "auto"  # "auto" = use best_model/strategy.json if it exists, None = Big Money
-SWITCH_AT       = 0.7  # Auto-switch opponent when win rate exceeds this
-BM_FLOOR        = 0.7  # Must still beat Big Money at this rate to switch opponent
-BM_WEIGHT       = 0.3  # Fraction of fitness from Big Money games (rest from opponent)
+HALL_MAX_SIZE   = 6    # Maximum hall of fame opponents
+HALL_ADD_THRESHOLD = 0.55  # Add to hall when win rate exceeds this
 WORKERS         = 8    # Parallel workers for evaluation (1 = sequential)
 
 
@@ -76,16 +74,6 @@ def main():
     start_gen = 0
     initial_population = None
 
-    # Load opponent: "auto" checks for saved model, None forces Big Money
-    opponent = None
-    opponent_label = "Big Money"
-    opponent_path = OPPONENT_PATH
-    if opponent_path == "auto":
-        opponent_path = "best_model/strategy.json"
-    if opponent_path and os.path.exists(opponent_path):
-        opponent = load_strategy(opponent_path)
-        opponent_label = opponent_path
-
     if continuing:
         if not os.path.exists("best_model/strategy.json"):
             print("ERROR: No best_model/strategy.json found. Run a fresh training first.")
@@ -94,9 +82,6 @@ def main():
         start_gen = _find_last_gen()
         rng = random.Random(SEED + start_gen)
         initial_population = _build_continue_population(best, POP_SIZE, rng, KINGDOM)
-        # Use the best model as opponent
-        opponent = best
-        opponent_label = f"best_model (gen {start_gen})"
         print(f"=== Continuing from generation {start_gen} ===")
     else:
         print(f"=== Phase-Aware GA for Simplified Dominion ===")
@@ -104,7 +89,7 @@ def main():
     print(f"Seed: {SEED}")
     print(f"Population: {POP_SIZE}, Generations: {start_gen + 1}-{start_gen + GENERATIONS}, "
           f"Games/eval: {GAMES_PER_EVAL}")
-    print(f"Opponent: {opponent_label}")
+    print(f"Hall of Fame: max_size={HALL_MAX_SIZE}, add_threshold={HALL_ADD_THRESHOLD}")
     print(f"Workers: {WORKERS}")
     print()
 
@@ -117,11 +102,8 @@ def main():
         "mutation_rate": MUTATION_RATE,
         "kingdom": KINGDOM,
         "seed": SEED + start_gen,  # different seed so we don't replay same games
-        "opponent": opponent,
-        "opponent_label": opponent_label,
-        "switch_threshold": SWITCH_AT,
-        "bm_floor": BM_FLOOR,
-        "bm_weight": BM_WEIGHT,
+        "hall_max_size": HALL_MAX_SIZE,
+        "hall_add_threshold": HALL_ADD_THRESHOLD,
         "workers": WORKERS,
         "csv_path": "evolution_log.csv",
         "start_gen": start_gen,
@@ -135,15 +117,13 @@ def main():
 
     print(f"\nEvolution complete in {elapsed:.1f}s\n")
 
-    # Evaluate best strategy with more games against the final opponent
-    final_opponent = result["opponent"]
-    final_label = result["opponent_label"]
+    # Evaluate best strategy with more games against the final hall
+    hall = result["hall"]
     rng = random.Random(SEED + 1000)
     eval_seeds = make_seed_list(200, rng)
-    vs = evaluate_vs_opponent(result["best_strategy"], eval_seeds, KINGDOM,
-                              opponent=final_opponent)
+    vs = evaluate_vs_hall(result["best_strategy"], eval_seeds, hall, KINGDOM)
     vs["num_games"] = 200
-    vs["opponent"] = final_label
+    vs["opponent"] = f"hall({len(hall)})"
 
     # Print full summary
     print(summarize(result["best_strategy"], vs))

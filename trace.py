@@ -28,7 +28,8 @@ from engine import (
 )
 from strategy import (
     Strategy, load_strategy, big_money_strategy,
-    get_current_phase, get_buy_priority,
+    get_current_phase, get_buy_priority, get_action_priority,
+    get_chapel_trash_priority,
 )
 
 
@@ -105,10 +106,12 @@ def _deck_summary(state: GameState) -> str:
 
 def traced_action_phase(state: GameState, strategy: Strategy) -> list[str]:
     """Play action phase, return trace lines."""
+    phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
+    action_priority = get_action_priority(strategy, phase)
     lines = []
     while state.actions > 0:
         played = False
-        for card_name in strategy.action_priority:
+        for card_name in action_priority:
             if card_name in state.hand and state.actions > 0:
                 newly_drawn = resolve_action(state, card_name)
 
@@ -129,14 +132,14 @@ def traced_action_phase(state: GameState, strategy: Strategy) -> list[str]:
                     lines.append(f"  drew: {', '.join(newly_drawn)}")
 
                 if card.special == "chapel":
-                    lines.extend(traced_chapel(state, strategy))
+                    lines.extend(traced_chapel(state, strategy, phase))
                 elif card.special == "moneylender":
                     if play_moneylender(state):
                         lines.append("  TRASH Copper (+$3)")
                     else:
                         lines.append("  (no Copper to trash)")
                 elif card.special == "throne_room":
-                    lines.extend(traced_throne_room(state, strategy))
+                    lines.extend(traced_throne_room(state, strategy, phase))
                 elif card.special == "mine":
                     result = play_mine(state, strategy)
                     if result:
@@ -151,11 +154,13 @@ def traced_action_phase(state: GameState, strategy: Strategy) -> list[str]:
     return lines
 
 
-def traced_chapel(state: GameState, strategy: Strategy) -> list[str]:
+def traced_chapel(state: GameState, strategy: Strategy,
+                  phase: str = "early") -> list[str]:
     lines = []
+    chapel_trash_priority = get_chapel_trash_priority(strategy, phase)
     max_trash = min(strategy.chapel_max_trash, 4)
     trashed = 0
-    for card_name in strategy.chapel_trash_priority:
+    for card_name in chapel_trash_priority:
         if card_name == "STOP" or trashed >= max_trash:
             break
         while card_name in state.hand and trashed < max_trash:
@@ -167,7 +172,8 @@ def traced_chapel(state: GameState, strategy: Strategy) -> list[str]:
     return lines
 
 
-def traced_throne_room(state: GameState, strategy: Strategy) -> list[str]:
+def traced_throne_room(state: GameState, strategy: Strategy,
+                       phase: str = "mid") -> list[str]:
     """Choose best action from hand, play it twice, return trace lines."""
     lines = []
     # Pick highest-priority action using throne_room_priority
@@ -204,7 +210,7 @@ def traced_throne_room(state: GameState, strategy: Strategy) -> list[str]:
             lines.append(f"    drew: {', '.join(newly_drawn)}")
 
         if target_card.special == "chapel":
-            lines.extend(traced_chapel(state, strategy))
+            lines.extend(traced_chapel(state, strategy, phase))
         elif target_card.special == "moneylender":
             if play_moneylender(state):
                 lines.append("    TRASH Copper (+$3)")
@@ -253,6 +259,11 @@ def traced_buy_phase(state: GameState, strategy: Strategy) -> list[str]:
             if (card_name in state.supply
                     and state.supply[card_name] > 0
                     and ALL_CARDS[card_name].cost <= state.coins):
+                # Coin threshold check
+                if card_name == "Province" and state.coins > strategy.province_max_coins:
+                    continue
+                if card_name == "Duchy" and state.coins > strategy.duchy_max_coins:
+                    continue
                 if card_name in buy_targets:
                     if owned.get(card_name, 0) >= buy_targets[card_name]:
                         continue
