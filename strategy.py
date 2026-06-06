@@ -69,10 +69,10 @@ def random_strategy(rng: random.Random) -> Strategy:
     trashable = ["Estate", "Copper", "Duchy", "Silver", "STOP"]
     chapel_priority = shuffled(trashable)
 
-    # Buy targets: max copies to own per card (action cards 0-5, others uncapped)
+    # Buy targets: max copies to own per card (action cards 1-5, others uncapped)
     buy_targets: dict[str, int] = {}
     for card in KINGDOM_CARDS:
-        buy_targets[card] = rng.randint(0, 5)
+        buy_targets[card] = rng.randint(1, 5)
 
     # Throne Room priority: which action to double (excludes Throne Room itself)
     tr_candidates = [c for c in ACTION_CARDS if c != "Throne Room"]
@@ -89,7 +89,7 @@ def random_strategy(rng: random.Random) -> Strategy:
         chapel_trash_priority=chapel_priority,
         throne_room_priority=throne_room_priority,
         mine_trash_priority=mine_trash_priority,
-        chapel_max_trash=rng.randint(0, 4),
+        chapel_max_trash=rng.randint(1, 4),
         transitions=Transitions(
             early_to_mid_turn=rng.randint(2, 15),
             mid_to_late_provinces=rng.randint(2, 8),

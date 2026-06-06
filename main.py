@@ -31,7 +31,7 @@ ALL_KINGDOM     = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Cha
                    "Mine", "Merchant"]
 # Select 10 for training — change this list to train on different kingdoms
 KINGDOM         = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
-                   "Throne Room", "Council Room", "Mine", "Gardens"]
+                   "Throne Room", "Council Room", "Mine", "Moneylender"]
 OPPONENT_PATH   = "auto"  # "auto" = use best_model/strategy.json if it exists, None = Big Money
 SWITCH_AT       = 0.7  # Auto-switch opponent when win rate exceeds this
 BM_FLOOR        = 0.7  # Must still beat Big Money at this rate to switch opponent

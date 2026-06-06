@@ -149,12 +149,20 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
 
 def _mutate_list(lst: list[str], rate: float, rng: random.Random,
                  allow_pass: bool = True) -> list[str]:
-    """Swap mutation on a priority list. Optionally insert/remove PASS."""
+    """Mutate a priority list via swap, insertion move, or PASS toggle."""
     lst = list(lst)
-    # Swap two positions
     if len(lst) >= 2 and rng.random() < rate:
-        i, j = rng.sample(range(len(lst)), 2)
-        lst[i], lst[j] = lst[j], lst[i]
+        if rng.random() < 0.3:
+            # Insertion move: pull a card out and reinsert at a random position
+            # (can move a card across the entire list in one step)
+            i = rng.randrange(len(lst))
+            card = lst.pop(i)
+            j = rng.randrange(len(lst) + 1)
+            lst.insert(j, card)
+        else:
+            # Swap two positions
+            i, j = rng.sample(range(len(lst)), 2)
+            lst[i], lst[j] = lst[j], lst[i]
 
     # PASS insert/remove
     if allow_pass and rng.random() < rate / 5:
@@ -177,10 +185,10 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random) -> Strategy:
     s.mine_trash_priority = _mutate_list(s.mine_trash_priority, rate, rng, allow_pass=False)
     s.chapel_trash_priority = _mutate_list(s.chapel_trash_priority, rate, rng, allow_pass=False)
 
-    # Jitter chapel_max_trash
+    # Jitter chapel_max_trash (min 1 so chapel always has selection pressure)
     if rng.random() < rate:
         s.chapel_max_trash += rng.choice([-1, 0, 1])
-        s.chapel_max_trash = max(0, min(4, s.chapel_max_trash))
+        s.chapel_max_trash = max(1, min(4, s.chapel_max_trash))
 
     # Jitter transitions (occasional large jumps to escape sticky boundaries)
     if rng.random() < rate:
@@ -193,11 +201,11 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random) -> Strategy:
         s.transitions.mid_to_late_provinces += delta
         s.transitions.mid_to_late_provinces = max(2, min(8, s.transitions.mid_to_late_provinces))
 
-    # Jitter buy targets
+    # Jitter buy targets (min 1 so every card remains purchasable)
     for card in list(s.buy_targets):
         if rng.random() < rate:
             s.buy_targets[card] += rng.choice([-1, 0, 1])
-            s.buy_targets[card] = max(0, min(10, s.buy_targets[card]))
+            s.buy_targets[card] = max(1, min(10, s.buy_targets[card]))
 
     # Occasionally add/remove a target for a kingdom card
     if rng.random() < rate / 3:
