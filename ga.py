@@ -21,11 +21,13 @@ from strategy import (
 # Population initialisation
 # ---------------------------------------------------------------------------
 
-def init_population(pop_size: int, rng: random.Random) -> list[Strategy]:
+def init_population(pop_size: int, rng: random.Random,
+                    kingdom: list[str] | None = None) -> list[Strategy]:
     """Create initial population: random strategies + seeded archetypes."""
-    population = [big_money_strategy(), engine_strategy(), gardens_strategy()]
+    population = [big_money_strategy(kingdom), engine_strategy(kingdom),
+                  gardens_strategy(kingdom)]
     for _ in range(pop_size - len(population)):
-        population.append(random_strategy(rng))
+        population.append(random_strategy(rng, kingdom))
     return population
 
 
@@ -249,7 +251,7 @@ def run_ga(config: dict) -> dict:
     if initial_population is not None:
         population = initial_population
     else:
-        population = init_population(pop_size, ga_rng)
+        population = init_population(pop_size, ga_rng, kingdom)
     log = []
     overall_best_fitness = -1.0
     overall_best_strategy = None

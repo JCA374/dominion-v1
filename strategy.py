@@ -7,7 +7,8 @@ import os
 import random
 from dataclasses import dataclass, asdict, field
 
-from cards import BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS, TREASURE_CARDS
+from cards import (BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS, TREASURE_CARDS,
+                    VICTORY_CARDS, ALL_CARDS, CardType)
 
 
 @dataclass
@@ -51,8 +52,26 @@ def get_buy_priority(strategy: Strategy, phase: str) -> list[str]:
         return strategy.late_buy_priority
 
 
-def random_strategy(rng: random.Random) -> Strategy:
+def _buyable_cards(kingdom: list[str] | None = None) -> list[str]:
+    """Buyable cards for a given kingdom selection."""
+    if kingdom is None:
+        return BUYABLE_CARDS
+    return TREASURE_CARDS + VICTORY_CARDS + kingdom
+
+
+def _action_cards(kingdom: list[str] | None = None) -> list[str]:
+    """Action cards for a given kingdom selection."""
+    if kingdom is None:
+        return ACTION_CARDS
+    return [c for c in kingdom if ALL_CARDS[c].card_type == CardType.ACTION]
+
+
+def random_strategy(rng: random.Random,
+                    kingdom: list[str] | None = None) -> Strategy:
     """Generate a random strategy with shuffled priority lists."""
+    buyable = _buyable_cards(kingdom)
+    actions = _action_cards(kingdom)
+
     def shuffled(lst):
         copy = list(lst)
         rng.shuffle(copy)
@@ -60,7 +79,7 @@ def random_strategy(rng: random.Random) -> Strategy:
 
     # Each buy priority: shuffled buyable cards with PASS always included
     def random_buy_priority():
-        cards = shuffled(BUYABLE_CARDS)
+        cards = shuffled(buyable)
         pos = rng.randint(0, len(cards))
         cards.insert(pos, "PASS")
         return cards
@@ -70,12 +89,13 @@ def random_strategy(rng: random.Random) -> Strategy:
     chapel_priority = shuffled(trashable)
 
     # Buy targets: max copies to own per card (action cards 1-5, others uncapped)
+    kingdom_cards = kingdom if kingdom is not None else KINGDOM_CARDS
     buy_targets: dict[str, int] = {}
-    for card in KINGDOM_CARDS:
+    for card in kingdom_cards:
         buy_targets[card] = rng.randint(1, 5)
 
     # Throne Room priority: which action to double (excludes Throne Room itself)
-    tr_candidates = [c for c in ACTION_CARDS if c != "Throne Room"]
+    tr_candidates = [c for c in actions if c != "Throne Room"]
     throne_room_priority = shuffled(tr_candidates)
 
     # Mine trash priority: which treasure to upgrade first
@@ -85,7 +105,7 @@ def random_strategy(rng: random.Random) -> Strategy:
         early_buy_priority=random_buy_priority(),
         mid_buy_priority=random_buy_priority(),
         late_buy_priority=random_buy_priority(),
-        action_priority=shuffled(ACTION_CARDS),
+        action_priority=shuffled(actions),
         chapel_trash_priority=chapel_priority,
         throne_room_priority=throne_room_priority,
         mine_trash_priority=mine_trash_priority,
@@ -98,15 +118,18 @@ def random_strategy(rng: random.Random) -> Strategy:
     )
 
 
-def _full_buy_priority(preferred: list[str]) -> list[str]:
-    """Build a complete buy priority: preferred cards first, remaining BUYABLE_CARDS after, PASS at end."""
-    rest = [c for c in BUYABLE_CARDS if c not in preferred and c != "PASS"]
-    return preferred + rest + ["PASS"]
+def _full_buy_priority(preferred: list[str],
+                       kingdom: list[str] | None = None) -> list[str]:
+    """Build a complete buy priority: preferred cards first, remaining buyable after, PASS at end."""
+    buyable = _buyable_cards(kingdom)
+    rest = [c for c in buyable if c not in preferred and c != "PASS"]
+    return [c for c in preferred if c in buyable] + rest + ["PASS"]
 
 
-def _default_throne_room_priority() -> list[str]:
+def _default_throne_room_priority(kingdom: list[str] | None = None) -> list[str]:
     """Default Throne Room target priority: high-impact cards first."""
-    return [c for c in ACTION_CARDS if c != "Throne Room"]
+    actions = _action_cards(kingdom)
+    return [c for c in actions if c != "Throne Room"]
 
 
 def _default_mine_trash_priority() -> list[str]:
@@ -114,19 +137,20 @@ def _default_mine_trash_priority() -> list[str]:
     return ["Copper", "Silver"]
 
 
-def big_money_strategy() -> Strategy:
+def big_money_strategy(kingdom: list[str] | None = None) -> Strategy:
     """Seed archetype: Province > Gold > Silver, no actions.
 
     Uses explicit PASS-terminated lists so it never buys junk (Copper, Chapel, etc.)
     when it can't afford its preferred cards.
     """
+    actions = _action_cards(kingdom)
     return Strategy(
         early_buy_priority=["Gold", "Silver", "PASS"],
         mid_buy_priority=["Province", "Gold", "Silver", "PASS"],
         late_buy_priority=["Province", "Duchy", "Gold", "Estate", "Silver", "PASS"],
-        action_priority=ACTION_CARDS[:],
+        action_priority=actions[:],
         chapel_trash_priority=["STOP"],
-        throne_room_priority=_default_throne_room_priority(),
+        throne_room_priority=_default_throne_room_priority(kingdom),
         mine_trash_priority=_default_mine_trash_priority(),
         chapel_max_trash=0,
         transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
@@ -134,43 +158,45 @@ def big_money_strategy() -> Strategy:
     )
 
 
-def gardens_strategy() -> Strategy:
+def gardens_strategy(kingdom: list[str] | None = None) -> Strategy:
     """Seed archetype: Gardens rush — buy lots of cheap cards for VP."""
+    actions = _action_cards(kingdom)
+    tr_candidates = [c for c in actions if c != "Throne Room"]
     return Strategy(
-        early_buy_priority=_full_buy_priority(["Gardens", "Silver", "Throne Room"]),
-        mid_buy_priority=_full_buy_priority(["Gardens", "Silver", "Throne Room", "Copper", "Estate"]),
-        late_buy_priority=_full_buy_priority(["Province", "Gardens", "Duchy", "Estate", "Copper"]),
-        action_priority=["Council Room", "Throne Room", "Village", "Smithy", "Market",
-                         "Festival", "Laboratory", "Moneylender", "Chapel", "Mine", "Merchant"],
+        early_buy_priority=_full_buy_priority(["Gardens", "Silver", "Throne Room"], kingdom),
+        mid_buy_priority=_full_buy_priority(["Gardens", "Silver", "Throne Room", "Copper", "Estate"], kingdom),
+        late_buy_priority=_full_buy_priority(["Province", "Gardens", "Duchy", "Estate", "Copper"], kingdom),
+        action_priority=actions[:],
         chapel_trash_priority=["STOP"],
-        throne_room_priority=["Council Room", "Smithy", "Laboratory", "Festival",
-                              "Market", "Village", "Moneylender", "Chapel", "Mine", "Merchant"],
+        throne_room_priority=tr_candidates,
         mine_trash_priority=_default_mine_trash_priority(),
         chapel_max_trash=0,
         transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=2),
-        buy_targets={"Gardens": 8},
+        buy_targets={"Gardens": 8} if kingdom is None or "Gardens" in kingdom else {},
     )
 
 
-def engine_strategy() -> Strategy:
+def engine_strategy(kingdom: list[str] | None = None) -> Strategy:
     """Seed archetype: Chapel engine — thin deck early, build mid, green late."""
+    actions = _action_cards(kingdom)
+    tr_candidates = [c for c in actions if c != "Throne Room"]
+    all_targets = {"Chapel": 1, "Smithy": 2, "Village": 3, "Market": 2,
+                   "Laboratory": 3, "Festival": 2, "Council Room": 2,
+                   "Moneylender": 1, "Throne Room": 2, "Mine": 1, "Merchant": 2}
+    kingdom_set = set(kingdom) if kingdom is not None else None
+    buy_targets = {k: v for k, v in all_targets.items()
+                   if kingdom_set is None or k in kingdom_set}
     return Strategy(
-        early_buy_priority=_full_buy_priority(["Chapel", "Silver", "Village"]),
-        mid_buy_priority=_full_buy_priority(["Gold", "Smithy", "Silver", "Market", "Laboratory"]),
-        late_buy_priority=_full_buy_priority(["Province", "Duchy", "Gold", "Estate"]),
-        action_priority=["Village", "Festival", "Laboratory", "Market",
-                         "Council Room", "Smithy", "Moneylender", "Throne Room",
-                         "Mine", "Merchant", "Chapel"],
+        early_buy_priority=_full_buy_priority(["Chapel", "Silver", "Village"], kingdom),
+        mid_buy_priority=_full_buy_priority(["Gold", "Smithy", "Silver", "Market", "Laboratory"], kingdom),
+        late_buy_priority=_full_buy_priority(["Province", "Duchy", "Gold", "Estate"], kingdom),
+        action_priority=actions[:],
         chapel_trash_priority=["Estate", "STOP", "Copper"],
-        throne_room_priority=["Smithy", "Laboratory", "Council Room", "Festival",
-                              "Market", "Village", "Moneylender", "Chapel",
-                              "Mine", "Merchant"],
+        throne_room_priority=tr_candidates,
         mine_trash_priority=["Copper", "Silver"],
         chapel_max_trash=2,
         transitions=Transitions(early_to_mid_turn=5, mid_to_late_provinces=4),
-        buy_targets={"Chapel": 1, "Smithy": 2, "Village": 3, "Market": 2,
-                     "Laboratory": 3, "Festival": 2, "Council Room": 2,
-                     "Moneylender": 1, "Throne Room": 2, "Mine": 1, "Merchant": 2},
+        buy_targets=buy_targets,
     )
 
 
