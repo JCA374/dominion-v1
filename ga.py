@@ -225,6 +225,8 @@ def run_ga(config: dict) -> dict:
     opponent = config.get("opponent")
     opponent_label = config.get("opponent_label", "Big Money")
     switch_threshold = config.get("switch_threshold", 0.7)
+    bm_floor = config.get("bm_floor", 0.7)  # must beat Big Money at this rate to switch
+    bm_weight = config.get("bm_weight", 0.3)  # fraction of fitness from BM games
     best_model_dir = config.get("best_model_dir", "best_model")
     workers = config.get("workers", 1)
 
@@ -264,7 +266,21 @@ def run_ga(config: dict) -> dict:
             eval_results = evaluate_population(population, seed_list, kingdom,
                                                opponent=opponent,
                                                workers=workers)
-            fitnesses = [r["win_rate"] for r in eval_results]
+
+            # Mixed fitness: blend opponent win rate with Big Money win rate
+            if bm_weight > 0 and opponent is not None:
+                bm_seed_list = make_seed_list(
+                    max(4, int(games_per_eval * bm_weight / (1 - bm_weight))),
+                    master_rng)
+                bm_results = evaluate_population(population, bm_seed_list, kingdom,
+                                                  opponent=None, workers=workers)
+                fitnesses = [
+                    (1 - bm_weight) * r["win_rate"] + bm_weight * bm["win_rate"]
+                    for r, bm in zip(eval_results, bm_results)
+                ]
+            else:
+                bm_results = None
+                fitnesses = [r["win_rate"] for r in eval_results]
 
             # Stats
             best_idx = max(range(pop_size), key=lambda i: fitnesses[i])
@@ -307,8 +323,13 @@ def run_ga(config: dict) -> dict:
                 overall_best_fitness = best_fitness
                 overall_best_strategy = deepcopy(best_strat)
 
+            bm_info = ""
+            if bm_results is not None:
+                best_bm_wr = bm_results[best_idx]["win_rate"]
+                best_opp_wr = eval_results[best_idx]["win_rate"]
+                bm_info = f"  opp={best_opp_wr:4.0%} bm={best_bm_wr:4.0%}"
             line = (f"Gen {gen:3d} | best={best_fitness:5.0%}  mean={mean_fitness:5.0%}"
-                    f"  worst={worst_fitness:5.0%} | turns={best_turns:4.1f}"
+                    f"  worst={worst_fitness:5.0%}{bm_info} | turns={best_turns:4.1f}"
                     f" | early→mid t{best_strat.transitions.early_to_mid_turn}"
                     f"  mid→late p{best_strat.transitions.mid_to_late_provinces}")
             if new_best:
@@ -330,14 +351,23 @@ def run_ga(config: dict) -> dict:
                 save_best_model(best_strat, vs_stats, output_dir=best_model_dir)
 
             # Switch opponent when win rate is high enough
+            # but only if the candidate still beats Big Money (prevents drift)
             if (new_best and best_fitness >= switch_threshold
                     and gen < start_gen + generations):
-                opponent = deepcopy(overall_best_strategy)
-                opponent_num += 1
-                opponent_label = f"best_model_v{opponent_num}"
-                overall_best_fitness = -1.0
-                print(f"  >>> Opponent switched to {opponent_label} "
-                      f"(won {best_fitness:.0%} vs previous) <<<")
+                bm_check = evaluate_vs_opponent(
+                    overall_best_strategy, seed_list, kingdom, opponent=None)
+                bm_wr = bm_check["win_rate"]
+                if bm_wr >= bm_floor:
+                    opponent = deepcopy(overall_best_strategy)
+                    opponent_num += 1
+                    opponent_label = f"best_model_v{opponent_num}"
+                    overall_best_fitness = -1.0
+                    print(f"  >>> Opponent switched to {opponent_label} "
+                          f"(won {best_fitness:.0%} vs previous, "
+                          f"{bm_wr:.0%} vs Big Money) <<<")
+                else:
+                    print(f"  >>> Switch blocked: only {bm_wr:.0%} vs Big Money "
+                          f"(need {bm_floor:.0%}) <<<")
 
             # Don't evolve after the last generation
             if gen == start_gen + generations:

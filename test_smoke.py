@@ -14,7 +14,7 @@ from strategy import (
     big_money_strategy, engine_strategy, describe,
     save_best_model, load_strategy,
 )
-from fitness import evaluate, make_seed_list
+from fitness import evaluate, evaluate_vs_opponent, make_seed_list
 from ga import order_crossover, mutate, crossover, init_population
 
 
@@ -190,6 +190,7 @@ def test_short_ga_run():
         "seed": 42,
         "kingdom": KINGDOM_CARDS,
         "csv_path": "/tmp/smoke_test_log.csv",
+        "best_model_dir": "/tmp/test_short_ga_model",
     })
 
     assert len(result["log"]) == 5
@@ -1424,6 +1425,264 @@ def test_save_and_load_best_model(tmp_path):
         text = f.read()
     assert "BEST TACTIC SUMMARY" in text
     assert "42%" in text
+
+
+# ---------------------------------------------------------------------------
+# Opponent switching tests (SWITCH_AT / BM_FLOOR)
+# ---------------------------------------------------------------------------
+
+def test_opponent_switches_when_win_rate_exceeds_threshold():
+    """GA switches opponent when win rate >= switch_threshold and BM floor met."""
+    from unittest.mock import patch
+    from ga import run_ga
+
+    call_count = {"eval_pop": 0}
+
+    def fake_evaluate_population(population, seed_list, kingdom,
+                                  opponent=None, workers=1):
+        call_count["eval_pop"] += 1
+        results = []
+        for _ in population:
+            # All strategies "win" at 80% — above 0.7 threshold
+            results.append({
+                "win_rate": 0.8, "tie_rate": 0.1, "loss_rate": 0.1,
+                "mean_turns": 20.0, "avg_final_deck": {},
+            })
+        return results
+
+    def fake_evaluate_vs_opponent(strategy, seed_list, kingdom, opponent=None):
+        # BM check: return 60% — above 0.5 floor
+        return {"win_rate": 0.6, "tie_rate": 0.2, "loss_rate": 0.2,
+                "mean_turns": 20.0}
+
+    with patch("ga.evaluate_population", fake_evaluate_population), \
+         patch("ga.evaluate_vs_opponent", fake_evaluate_vs_opponent), \
+         patch("ga.save_best_model"):
+        result = run_ga({
+            "pop_size": 6,
+            "generations": 5,
+            "games_per_eval": 4,
+            "tournament_size": 2,
+            "elite_count": 1,
+            "mutation_rate": 0.1,
+            "seed": 42,
+            "kingdom": KINGDOM_CARDS,
+            "switch_threshold": 0.7,
+            "bm_floor": 0.5,
+            "csv_path": "/tmp/test_switch.csv",
+        })
+
+    # Opponent should have switched at least once (label contains version number)
+    assert result["opponent_label"].startswith("best_model_v")
+    # Version number should be > 1 (at least one switch happened)
+    version = int(result["opponent_label"].split("v")[1])
+    assert version >= 2
+
+
+def test_opponent_switch_blocked_when_bm_floor_not_met():
+    """GA does NOT switch opponent when BM win rate < bm_floor."""
+    from unittest.mock import patch
+    from ga import run_ga
+
+    switch_happened = {"yes": False}
+    original_opponent_labels = []
+
+    def fake_evaluate_population(population, seed_list, kingdom,
+                                  opponent=None, workers=1):
+        results = []
+        for _ in population:
+            results.append({
+                "win_rate": 0.8, "tie_rate": 0.1, "loss_rate": 0.1,
+                "mean_turns": 20.0, "avg_final_deck": {},
+            })
+        return results
+
+    def fake_evaluate_vs_opponent(strategy, seed_list, kingdom, opponent=None):
+        # BM check: return 40% — BELOW 0.5 floor
+        return {"win_rate": 0.4, "tie_rate": 0.2, "loss_rate": 0.4,
+                "mean_turns": 20.0}
+
+    with patch("ga.evaluate_population", fake_evaluate_population), \
+         patch("ga.evaluate_vs_opponent", fake_evaluate_vs_opponent), \
+         patch("ga.save_best_model"):
+        result = run_ga({
+            "pop_size": 6,
+            "generations": 5,
+            "games_per_eval": 4,
+            "tournament_size": 2,
+            "elite_count": 1,
+            "mutation_rate": 0.1,
+            "seed": 42,
+            "kingdom": KINGDOM_CARDS,
+            "switch_threshold": 0.7,
+            "bm_floor": 0.5,
+            "csv_path": "/tmp/test_no_switch.csv",
+        })
+
+    # Opponent should NOT have switched — label stays as default
+    assert result["opponent_label"] == "Big Money"
+
+
+# ---------------------------------------------------------------------------
+# Evaluation correctness tests
+# ---------------------------------------------------------------------------
+
+def test_eval_big_money_vs_itself_is_balanced():
+    """Big Money vs itself should win ~50% (each side is the same)."""
+    bm = big_money_strategy()
+    rng = random.Random(99)
+    seeds = make_seed_list(100, rng)
+    result = evaluate_vs_opponent(bm, seeds, KINGDOM_CARDS, opponent=bm)
+    # Should be close to 50% with some variance — allow 30%-70%
+    assert 0.30 <= result["win_rate"] <= 0.70, (
+        f"BM vs itself should be ~50%, got {result['win_rate']:.0%}")
+
+
+def test_eval_counts_wins_correctly():
+    """Verify win/tie/loss always sum to 1.0."""
+    bm = big_money_strategy()
+    rng = random.Random(42)
+    seeds = make_seed_list(50, rng)
+    result = evaluate_vs_opponent(bm, seeds, KINGDOM_CARDS, opponent=bm)
+    total = result["win_rate"] + result["tie_rate"] + result["loss_rate"]
+    assert abs(total - 1.0) < 1e-9, f"Win+tie+loss = {total}, expected 1.0"
+
+
+def test_big_money_beats_do_nothing_strategy():
+    """A strategy that passes on all buys should lose to Big Money."""
+    # PASS first = never buy anything
+    do_nothing = Strategy(
+        early_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        mid_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        late_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        action_priority=ACTION_CARDS[:],
+        chapel_trash_priority=["STOP"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+    rng = random.Random(42)
+    seeds = make_seed_list(50, rng)
+    result = evaluate_vs_opponent(do_nothing, seeds, KINGDOM_CARDS, opponent=None)
+    # Big Money should crush a do-nothing strategy
+    assert result["win_rate"] < 0.05, (
+        f"Do-nothing should lose to Big Money, but won {result['win_rate']:.0%}")
+
+
+def test_big_money_wins_as_both_p1_and_p2():
+    """Verify evaluate_vs_opponent counts wins correctly from both positions."""
+    from engine import play_game_2p
+
+    bm = big_money_strategy()
+    do_nothing = Strategy(
+        early_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        mid_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        late_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        action_priority=ACTION_CARDS[:],
+        chapel_trash_priority=["STOP"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    # Manual check: BM as P1 should win
+    r1 = play_game_2p(bm, do_nothing, 42, KINGDOM_CARDS)
+    assert r1["vp1"] > r1["vp2"], "BM as P1 should beat do-nothing"
+
+    # Manual check: BM as P2 should also win
+    r2 = play_game_2p(do_nothing, bm, 42, KINGDOM_CARDS)
+    assert r2["vp2"] > r2["vp1"], "BM as P2 should beat do-nothing"
+
+
+def test_buy_target_zero_blocks_purchase():
+    """buy_targets={card: 0} should prevent the strategy from ever buying that card."""
+    from engine import play_game_2p
+
+    # Strategy that wants Province first but has buy_target=0 for Province
+    blocked = Strategy(
+        early_buy_priority=["Province", "Gold", "Silver"] + [
+            c for c in BUYABLE_CARDS if c not in ["Province", "Gold", "Silver"]],
+        mid_buy_priority=["Province", "Gold", "Silver"] + [
+            c for c in BUYABLE_CARDS if c not in ["Province", "Gold", "Silver"]],
+        late_buy_priority=["Province", "Gold", "Silver"] + [
+            c for c in BUYABLE_CARDS if c not in ["Province", "Gold", "Silver"]],
+        action_priority=ACTION_CARDS[:],
+        chapel_trash_priority=["STOP"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+        buy_targets={"Province": 0},  # never buy Province!
+    )
+    rng = random.Random(42)
+    seeds = make_seed_list(20, rng)
+    result = evaluate_vs_opponent(blocked, seeds, KINGDOM_CARDS, opponent=None)
+    # Can't buy Province → should lose to Big Money almost always
+    assert result["win_rate"] < 0.15, (
+        f"Province-blocked should lose to BM, but won {result['win_rate']:.0%}")
+
+
+def test_ga_best_strategy_beats_big_money():
+    """GA output (trained vs Big Money) must beat Big Money at bm_floor rate."""
+    from ga import run_ga
+
+    result = run_ga({
+        "pop_size": 20,
+        "generations": 15,
+        "games_per_eval": 30,
+        "tournament_size": 3,
+        "elite_count": 2,
+        "mutation_rate": 0.15,
+        "seed": 42,
+        "kingdom": KINGDOM_CARDS,
+        "opponent": None,           # force Big Money opponent
+        "switch_threshold": 99.0,   # disable switching
+        "csv_path": "/tmp/test_ga_bm.csv",
+        "best_model_dir": "/tmp/test_ga_bm_model",
+    })
+
+    # Verify best strategy actually beats Big Money
+    rng = random.Random(99)
+    seeds = make_seed_list(100, rng)
+    vs = evaluate_vs_opponent(result["best_strategy"], seeds, KINGDOM_CARDS,
+                              opponent=None)
+    assert vs["win_rate"] >= 0.50, (
+        f"GA best should beat Big Money >=50%, got {vs['win_rate']:.0%}")
+
+
+def test_ga_mixed_fitness_prevents_bm_drift():
+    """GA with mixed fitness (opponent + BM) must still beat Big Money."""
+    from ga import run_ga
+
+    # Use a do-nothing strategy as opponent so the GA could easily "drift"
+    # if it only optimized against the opponent
+    do_nothing = Strategy(
+        early_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        mid_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        late_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        action_priority=ACTION_CARDS[:],
+        chapel_trash_priority=["STOP"],
+        transitions=Transitions(early_to_mid_turn=6, mid_to_late_provinces=4),
+    )
+
+    result = run_ga({
+        "pop_size": 20,
+        "generations": 15,
+        "games_per_eval": 30,
+        "tournament_size": 3,
+        "elite_count": 2,
+        "mutation_rate": 0.15,
+        "seed": 42,
+        "kingdom": KINGDOM_CARDS,
+        "opponent": do_nothing,
+        "opponent_label": "DoNothing",
+        "switch_threshold": 99.0,   # disable switching
+        "bm_weight": 0.3,          # 30% fitness from BM
+        "csv_path": "/tmp/test_ga_mixed.csv",
+        "best_model_dir": "/tmp/test_ga_mixed_model",
+    })
+
+    # Even though trained against a weak opponent, the BM component
+    # should keep the strategy competitive against Big Money
+    rng = random.Random(99)
+    seeds = make_seed_list(100, rng)
+    vs = evaluate_vs_opponent(result["best_strategy"], seeds, KINGDOM_CARDS,
+                              opponent=None)
+    assert vs["win_rate"] >= 0.45, (
+        f"Mixed-fitness GA should still beat BM >=45%, got {vs['win_rate']:.0%}")
 
 
 if __name__ == "__main__":

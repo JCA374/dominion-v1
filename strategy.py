@@ -115,11 +115,15 @@ def _default_mine_trash_priority() -> list[str]:
 
 
 def big_money_strategy() -> Strategy:
-    """Seed archetype: Province > Gold > Silver, no actions."""
+    """Seed archetype: Province > Gold > Silver, no actions.
+
+    Uses explicit PASS-terminated lists so it never buys junk (Copper, Chapel, etc.)
+    when it can't afford its preferred cards.
+    """
     return Strategy(
-        early_buy_priority=_full_buy_priority(["Silver", "Gold"]),
-        mid_buy_priority=_full_buy_priority(["Province", "Gold", "Silver"]),
-        late_buy_priority=_full_buy_priority(["Province", "Duchy", "Gold", "Estate", "Silver"]),
+        early_buy_priority=["Gold", "Silver", "PASS"],
+        mid_buy_priority=["Province", "Gold", "Silver", "PASS"],
+        late_buy_priority=["Province", "Duchy", "Gold", "Estate", "Silver", "PASS"],
         action_priority=ACTION_CARDS[:],
         chapel_trash_priority=["STOP"],
         throne_room_priority=_default_throne_room_priority(),

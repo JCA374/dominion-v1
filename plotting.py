@@ -72,26 +72,32 @@ def plot_transitions(log: list[dict], filename: str = "transitions.png") -> None
 
 def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> None:
     """Heatmap showing priority rank of each card per phase."""
-    phases = ["early", "mid", "late"]
     lists = [
         strategy.early_buy_priority,
         strategy.mid_buy_priority,
         strategy.late_buy_priority,
     ]
 
-    # Include PASS as a row in the heatmap
-    cards = list(BUYABLE_CARDS) + ["PASS"]
+    # Derive card list from the strategy's actual priorities (preserves kingdom selection)
+    seen = set()
+    cards = []
+    for priority_list in lists:
+        for card in priority_list:
+            if card not in seen:
+                seen.add(card)
+                cards.append(card)
+
     data = np.full((len(cards), 3), np.nan)
 
     for col, priority_list in enumerate(lists):
         for rank, card_name in enumerate(priority_list):
-            if card_name in cards:
+            if card_name in seen:
                 row = cards.index(card_name)
                 data[row, col] = rank + 1  # 1-indexed rank
 
-    fig, ax = plt.subplots(figsize=(6, 8))
+    fig, ax = plt.subplots(figsize=(6, max(4, len(cards) * 0.4)))
     cmap = plt.cm.RdYlGn_r  # lower rank (higher priority) = green
-    n_items = len(cards)
+    n_items = max(len(lst) for lst in lists)
     im = ax.imshow(data, cmap=cmap, aspect="auto", vmin=1, vmax=n_items)
 
     ax.set_xticks(range(3))
@@ -100,8 +106,9 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
     ax.set_yticklabels(cards)
 
     # Highlight PASS row with a different background
-    pass_row = cards.index("PASS")
-    ax.axhline(y=pass_row - 0.5, color="gray", linewidth=0.5, linestyle="--")
+    if "PASS" in cards:
+        pass_row = cards.index("PASS")
+        ax.axhline(y=pass_row - 0.5, color="gray", linewidth=0.5, linestyle="--")
 
     # Annotate cells with rank
     for i in range(len(cards)):

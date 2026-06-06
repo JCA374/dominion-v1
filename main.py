@@ -34,6 +34,8 @@ KINGDOM         = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Cha
                    "Throne Room", "Council Room", "Mine", "Gardens"]
 OPPONENT_PATH   = "auto"  # "auto" = use best_model/strategy.json if it exists, None = Big Money
 SWITCH_AT       = 0.7  # Auto-switch opponent when win rate exceeds this
+BM_FLOOR        = 0.7  # Must still beat Big Money at this rate to switch opponent
+BM_WEIGHT       = 0.3  # Fraction of fitness from Big Money games (rest from opponent)
 WORKERS         = 8    # Parallel workers for evaluation (1 = sequential)
 
 
@@ -117,6 +119,8 @@ def main():
         "opponent": opponent,
         "opponent_label": opponent_label,
         "switch_threshold": SWITCH_AT,
+        "bm_floor": BM_FLOOR,
+        "bm_weight": BM_WEIGHT,
         "workers": WORKERS,
         "csv_path": "evolution_log.csv",
         "start_gen": start_gen,

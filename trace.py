@@ -248,6 +248,7 @@ def traced_buy_phase(state: GameState, strategy: Strategy) -> list[str]:
                 if not bought_any:
                     lines.append("BUY nothing (PASS)")
                 state.buys = 0
+                bought = True  # suppress "BUY nothing" fallback
                 break
             if (card_name in state.supply
                     and state.supply[card_name] > 0
