@@ -28,7 +28,7 @@ from engine import (
 )
 from strategy import (
     Strategy, load_strategy, big_money_strategy,
-    get_current_phase, get_buy_priority, get_action_priority,
+    get_current_phase, get_buy_priority, get_action_priority, get_action_priorities,
     get_chapel_trash_priority,
 )
 
@@ -104,14 +104,13 @@ def _deck_summary(state: GameState) -> str:
 # Traced phases — collect lines instead of printing directly
 # ---------------------------------------------------------------------------
 
-def traced_action_phase(state: GameState, strategy: Strategy) -> list[str]:
-    """Play action phase, return trace lines."""
-    phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
-    action_priority = get_action_priority(strategy, phase)
+def _traced_action_tier(state: GameState, strategy: Strategy,
+                        priority: list[str], phase: str) -> list[str]:
+    """Play one tier of actions, return trace lines."""
     lines = []
     while state.actions > 0:
         played = False
-        for card_name in action_priority:
+        for card_name in priority:
             if card_name in state.hand and state.actions > 0:
                 newly_drawn = resolve_action(state, card_name)
 
@@ -151,6 +150,16 @@ def traced_action_phase(state: GameState, strategy: Strategy) -> list[str]:
                 break
         if not played:
             break
+    return lines
+
+
+def traced_action_phase(state: GameState, strategy: Strategy) -> list[str]:
+    """Play action phase: non-terminals first, then terminals."""
+    phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
+    nt_priority, t_priority = get_action_priorities(strategy, phase)
+    lines = []
+    lines.extend(_traced_action_tier(state, strategy, nt_priority, phase))
+    lines.extend(_traced_action_tier(state, strategy, t_priority, phase))
     return lines
 
 

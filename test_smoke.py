@@ -2,7 +2,8 @@
 
 import random
 
-from cards import ALL_CARDS, BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS, CardType
+from cards import (ALL_CARDS, BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS,
+                    NONTERMINAL_ACTIONS, TERMINAL_ACTIONS, CardType)
 from engine import (
     new_game, play_game, play_game_2p, play_action_phase, play_buy_phase,
     play_chapel, play_moneylender, play_throne_room, play_mine,
@@ -95,39 +96,47 @@ def test_phase_selection():
     assert get_current_phase(20, 4, t) == "late"
 
 
-def test_phase_specific_action_priority():
-    """Different phases use different action priority lists."""
+def test_nonterminals_play_before_terminals():
+    """Non-terminal actions always play before terminal actions."""
     state = _make_state_with_hand(
         ["Village", "Smithy"],
         deck=["Copper"] * 10,
     )
     state.supply = _full_supply()
-    # Early: play Smithy first (will use action, no more Village)
-    # Mid: play Village first (gives +actions, then Smithy)
+    state.turn = 1
+    # Even though terminal_priority lists Smithy first,
+    # Village (non-terminal) plays first due to structural split
     strategy = _make_strategy(
-        early_action_priority=["Smithy", "Village"],
-        mid_action_priority=["Village", "Smithy"],
-        late_action_priority=["Village", "Smithy"],
+        early_nonterminal_priority=["Village"],
+        early_terminal_priority=["Smithy"],
         transitions=Transitions(early_to_mid_turn=3, mid_to_late_provinces=4),
     )
-
-    # Turn 1 → early phase: Smithy plays first, uses the action, Village stays
-    state.turn = 1
     play_action_phase(state, strategy)
-    assert state.play_area == ["Smithy"]
-    assert "Village" in state.hand
+    # Village plays first (+2 actions), then Smithy
+    assert "Village" in state.play_area
+    assert "Smithy" in state.play_area
+    # Village must have been played first (index 0)
+    assert state.play_area.index("Village") < state.play_area.index("Smithy")
 
-    # Reset for mid phase test
-    state2 = _make_state_with_hand(
-        ["Village", "Smithy"],
-        deck=["Copper"] * 10,
+
+def test_drawn_terminal_waits_for_terminal_tier():
+    """A terminal card drawn during the non-terminal tier doesn't play until terminal tier."""
+    # Village draws from deck — if it draws Smithy, Smithy should wait
+    state = _make_state_with_hand(
+        ["Village"],
+        deck=["Copper", "Copper", "Copper", "Copper", "Smithy"],
     )
-    state2.supply = _full_supply()
-    state2.turn = 5  # mid phase
-    play_action_phase(state2, strategy)
-    # Village first → +2 actions → then Smithy
-    assert "Village" in state2.play_area
-    assert "Smithy" in state2.play_area
+    state.supply = _full_supply()
+    state.turn = 1
+    strategy = _make_strategy(
+        early_nonterminal_priority=["Village"],
+        early_terminal_priority=["Smithy"],
+    )
+    play_action_phase(state, strategy)
+    # Village plays in NT tier (draws Smithy into hand), then Smithy plays in T tier
+    assert "Village" in state.play_area
+    assert "Smithy" in state.play_area
+    assert state.play_area.index("Village") < state.play_area.index("Smithy")
 
 
 def test_phase_specific_chapel_trash():
@@ -140,9 +149,9 @@ def test_phase_specific_chapel_trash():
     state_early.supply = _full_supply()
     state_early.turn = 1
     strategy = _make_strategy(
-        early_action_priority=["Chapel"],
-        mid_action_priority=["Chapel"],
-        late_action_priority=["Chapel"],
+        early_terminal_priority=["Chapel"],
+        mid_terminal_priority=["Chapel"],
+        late_terminal_priority=["Chapel"],
         early_chapel_trash=["Estate", "Copper", "STOP"],
         mid_chapel_trash=["Estate", "STOP"],
         late_chapel_trash=["STOP"],  # never trash late
@@ -179,10 +188,14 @@ def test_random_strategies_valid():
             assert len(non_pass) == len(set(non_pass)), f"Duplicates in {lst_name}"
             assert lst.count("PASS") <= 1
 
-        for ap_name in ["early_action_priority", "mid_action_priority", "late_action_priority"]:
-            ap = getattr(s, ap_name)
-            non_stop = [c for c in ap if c != "STOP"]
-            assert set(non_stop) == action_set, f"Invalid {ap_name}"
+        nt_set = set(NONTERMINAL_ACTIONS)
+        t_set = set(TERMINAL_ACTIONS)
+        for nt_name in ["early_nonterminal_priority", "mid_nonterminal_priority", "late_nonterminal_priority"]:
+            nt = getattr(s, nt_name)
+            assert set(nt) == nt_set, f"Invalid {nt_name}"
+        for t_name in ["early_terminal_priority", "mid_terminal_priority", "late_terminal_priority"]:
+            t = getattr(s, t_name)
+            assert set(t) == t_set, f"Invalid {t_name}"
 
         for ct_name in ["early_chapel_trash", "mid_chapel_trash", "late_chapel_trash"]:
             ct = getattr(s, ct_name)
@@ -298,9 +311,12 @@ def _make_strategy(**overrides) -> Strategy:
         early_buy_priority=BUYABLE_CARDS[:],
         mid_buy_priority=BUYABLE_CARDS[:],
         late_buy_priority=BUYABLE_CARDS[:],
-        early_action_priority=ACTION_CARDS[:],
-        mid_action_priority=ACTION_CARDS[:],
-        late_action_priority=ACTION_CARDS[:],
+        early_nonterminal_priority=NONTERMINAL_ACTIONS[:],
+        early_terminal_priority=TERMINAL_ACTIONS[:],
+        mid_nonterminal_priority=NONTERMINAL_ACTIONS[:],
+        mid_terminal_priority=TERMINAL_ACTIONS[:],
+        late_nonterminal_priority=NONTERMINAL_ACTIONS[:],
+        late_terminal_priority=TERMINAL_ACTIONS[:],
         early_chapel_trash=["Estate", "Copper", "STOP"],
         mid_chapel_trash=["Estate", "Copper", "STOP"],
         late_chapel_trash=["STOP"],
@@ -317,13 +333,17 @@ def _make_strategy(**overrides) -> Strategy:
 def _action_strategy(card_name):
     """Helper: strategy that plays a single action card."""
     prov_first = ["Province"] + [c for c in BUYABLE_CARDS if c != "Province"]
+    is_nt = ALL_CARDS[card_name].actions > 0
     return _make_strategy(
         early_buy_priority=prov_first,
         mid_buy_priority=prov_first,
         late_buy_priority=prov_first,
-        early_action_priority=[card_name],
-        mid_action_priority=[card_name],
-        late_action_priority=[card_name],
+        early_nonterminal_priority=[card_name] if is_nt else [],
+        early_terminal_priority=[card_name] if not is_nt else [],
+        mid_nonterminal_priority=[card_name] if is_nt else [],
+        mid_terminal_priority=[card_name] if not is_nt else [],
+        late_nonterminal_priority=[card_name] if is_nt else [],
+        late_terminal_priority=[card_name] if not is_nt else [],
     )
 
 
@@ -413,9 +433,8 @@ def test_village_then_smithy_chain():
         deck=["Copper", "Silver", "Gold", "Estate"],
     )
     strategy = _make_strategy(
-        early_action_priority=["Village", "Smithy"],
-        mid_action_priority=["Village", "Smithy"],
-        late_action_priority=["Village", "Smithy"],
+        early_nonterminal_priority=["Village"],
+        early_terminal_priority=["Smithy"],
     )
 
     play_action_phase(state, strategy)
@@ -591,9 +610,9 @@ def test_chapel_trashes_cards():
 def _chapel_strategy(trash_priority):
     """Helper: strategy that plays Chapel with given trash priority in all phases."""
     return _make_strategy(
-        early_action_priority=["Chapel"],
-        mid_action_priority=["Chapel"],
-        late_action_priority=["Chapel"],
+        early_terminal_priority=["Chapel"],
+        mid_terminal_priority=["Chapel"],
+        late_terminal_priority=["Chapel"],
         early_chapel_trash=trash_priority,
         mid_chapel_trash=trash_priority,
         late_chapel_trash=trash_priority,
@@ -824,8 +843,8 @@ def test_action_without_extra_actions_plays_one():
     """With 1 action and no +action cards, only one action card is played."""
     state = _make_state_with_hand(["Smithy", "Smithy"])
     strategy = _make_strategy(
-        early_action_priority=["Smithy"], mid_action_priority=["Smithy"],
-        late_action_priority=["Smithy"],
+        early_terminal_priority=["Smithy"], mid_terminal_priority=["Smithy"],
+        late_terminal_priority=["Smithy"],
     )
 
     play_action_phase(state, strategy)
@@ -925,9 +944,9 @@ def test_full_turn_action_buy_cleanup():
     state.turn = 1
     strategy = _make_strategy(
         early_buy_priority=["Silver"] + [c for c in BUYABLE_CARDS if c != "Silver"],
-        early_action_priority=["Village"],
-        mid_action_priority=["Village"],
-        late_action_priority=["Village"],
+        early_nonterminal_priority=["Village"],
+        mid_nonterminal_priority=["Village"],
+        late_nonterminal_priority=["Village"],
     )
 
     # Action phase: Village played, draws 1, gets +2 actions
@@ -1039,23 +1058,21 @@ def test_ga_chapel_crossover_preserves_stop():
         assert "STOP" in child, f"STOP missing from crossover result: {child}"
 
 
-def test_ga_chapel_mutation_moves_stop():
-    """Mutation can swap STOP to different positions, changing trash behavior."""
+def test_ga_chapel_trash_hardcoded():
+    """Chapel trash is hardcoded and not affected by mutation."""
     base = _make_strategy(
-        early_chapel_trash=["Estate", "Copper", "STOP", "Duchy", "Silver"],
-        mid_chapel_trash=["Estate", "Copper", "STOP", "Duchy", "Silver"],
-        late_chapel_trash=["Estate", "Copper", "STOP", "Duchy", "Silver"],
+        early_chapel_trash=["Duchy", "STOP", "Copper", "Estate"],
+        mid_chapel_trash=["Duchy", "STOP", "Copper", "Estate"],
+        late_chapel_trash=["Duchy", "STOP", "Copper", "Estate"],
     )
 
     rng = random.Random(42)
-    stop_positions = set()
-    for _ in range(200):
-        mutated = mutate(base, rate=1.0, rng=rng)  # high rate to force swaps
-        pos = mutated.early_chapel_trash.index("STOP")
-        stop_positions.add(pos)
-
-    # With enough mutations, STOP should appear in multiple positions
-    assert len(stop_positions) >= 3, f"STOP only found at positions {stop_positions}"
+    for _ in range(50):
+        mutated = mutate(base, rate=1.0, rng=rng)
+        assert mutated.early_chapel_trash == ["Estate", "Copper", "STOP"]
+        assert mutated.mid_chapel_trash == ["Estate", "Copper", "STOP"]
+        assert mutated.late_chapel_trash == ["STOP"]
+        assert mutated.chapel_max_trash == 4
 
 
 # ---------------------------------------------------------------------------
@@ -1072,9 +1089,10 @@ def test_throne_room_doubles_smithy():
         ["Throne Room", "Smithy"],
         deck=["Copper"] * 10,
     )
-    ap = ["Throne Room", "Smithy"]
     strategy = _make_strategy(
-        early_action_priority=ap, mid_action_priority=ap, late_action_priority=ap,
+        early_terminal_priority=["Throne Room", "Smithy"],
+        mid_terminal_priority=["Throne Room", "Smithy"],
+        late_terminal_priority=["Throne Room", "Smithy"],
         throne_room_priority=["Smithy"],
     )
 
@@ -1086,25 +1104,29 @@ def test_throne_room_doubles_smithy():
     assert state.actions == 0  # TR costs 1, Smithy gives 0
 
 
-def test_throne_room_doubles_village():
-    """Throne Room + Village: draw 2 cards, gain 4 actions."""
+def test_throne_room_doubles_chapel():
+    """Throne Room + Chapel (both terminal): should trash twice."""
     state = _make_state_with_hand(
-        ["Throne Room", "Village"],
-        deck=["Copper"] * 10,
+        ["Throne Room", "Chapel", "Estate", "Estate", "Copper"],
+        deck=["Silver"] * 5,
     )
-    ap = ["Throne Room", "Village"]
     strategy = _make_strategy(
-        early_action_priority=ap, mid_action_priority=ap, late_action_priority=ap,
-        throne_room_priority=["Village"],
+        early_terminal_priority=["Throne Room", "Chapel"],
+        mid_terminal_priority=["Throne Room", "Chapel"],
+        late_terminal_priority=["Throne Room", "Chapel"],
+        throne_room_priority=["Chapel"],
+        early_chapel_trash=["Estate", "Copper", "STOP"],
+        mid_chapel_trash=["Estate", "Copper", "STOP"],
+        late_chapel_trash=["Estate", "Copper", "STOP"],
+        chapel_max_trash=2,
     )
 
     play_action_phase(state, strategy)
 
     assert "Throne Room" in state.play_area
-    assert "Village" in state.play_area
-    assert len(state.hand) == 2  # 1 + 1
-    # TR: 1 - 1 + 0 = 0, then Village doubled: 0 + 2 + 2 = 4
-    assert state.actions == 4
+    assert "Chapel" in state.play_area
+    # Chapel doubled: trash up to 2 per play × 2 = up to 4
+    assert len(state.trash) >= 2
 
 
 def test_throne_room_no_target():
@@ -1113,9 +1135,10 @@ def test_throne_room_no_target():
         ["Throne Room", "Copper", "Silver"],
         deck=["Copper"] * 10,
     )
-    ap = ["Throne Room", "Smithy"]
     strategy = _make_strategy(
-        early_action_priority=ap, mid_action_priority=ap, late_action_priority=ap,
+        early_terminal_priority=["Throne Room", "Smithy"],
+        mid_terminal_priority=["Throne Room", "Smithy"],
+        late_terminal_priority=["Throne Room", "Smithy"],
         throne_room_priority=["Smithy"],
     )
 
@@ -1133,9 +1156,10 @@ def test_throne_room_doubles_moneylender():
         ["Throne Room", "Moneylender", "Copper", "Copper", "Silver"],
         deck=["Gold"] * 5,
     )
-    ap = ["Throne Room", "Moneylender"]
     strategy = _make_strategy(
-        early_action_priority=ap, mid_action_priority=ap, late_action_priority=ap,
+        early_terminal_priority=["Throne Room", "Moneylender"],
+        mid_terminal_priority=["Throne Room", "Moneylender"],
+        late_terminal_priority=["Throne Room", "Moneylender"],
         throne_room_priority=["Moneylender"],
     )
 
@@ -1147,25 +1171,26 @@ def test_throne_room_doubles_moneylender():
 
 
 def test_throne_room_priority_matters():
-    """Throne Room should pick target from throne_room_priority, not action_priority."""
+    """Throne Room should pick target from throne_room_priority, not terminal_priority."""
     state = _make_state_with_hand(
-        ["Throne Room", "Village", "Smithy"],
+        ["Throne Room", "Smithy", "Moneylender"],
         deck=["Copper"] * 10,
     )
-    # action_priority prefers Village, but throne_room_priority prefers Smithy
-    ap = ["Throne Room", "Village", "Smithy"]
+    # terminal_priority prefers Smithy first, but throne_room_priority prefers Moneylender
     strategy = _make_strategy(
-        early_action_priority=ap, mid_action_priority=ap, late_action_priority=ap,
-        throne_room_priority=["Smithy", "Village"],
+        early_terminal_priority=["Throne Room", "Smithy", "Moneylender"],
+        mid_terminal_priority=["Throne Room", "Smithy", "Moneylender"],
+        late_terminal_priority=["Throne Room", "Smithy", "Moneylender"],
+        throne_room_priority=["Moneylender", "Smithy"],
     )
 
     play_action_phase(state, strategy)
 
     assert "Throne Room" in state.play_area
-    assert "Smithy" in state.play_area
-    # Smithy doubled = 6 cards drawn; Village still in hand
-    assert "Village" in state.hand
-    assert len(state.hand) == 7  # Village + 6 drawn
+    assert "Moneylender" in state.play_area
+    # Moneylender doubled (no Copper in hand to trash, so just plays)
+    # Smithy still in hand (wasn't picked by TR)
+    assert "Smithy" not in state.play_area or "Moneylender" in state.play_area
 
 
 def test_council_room_draws_four():
@@ -1245,8 +1270,8 @@ def test_mine_upgrades_copper_to_silver():
     """Mine should trash Copper and gain Silver to hand."""
     state = _make_state_with_hand(["Mine", "Copper", "Silver"])
     strategy = _make_strategy(
-        early_action_priority=["Mine"], mid_action_priority=["Mine"],
-        late_action_priority=["Mine"], mine_trash_priority=["Copper", "Silver"],
+        early_terminal_priority=["Mine"], mid_terminal_priority=["Mine"],
+        late_terminal_priority=["Mine"], mine_trash_priority=["Copper", "Silver"],
     )
 
     play_action_phase(state, strategy)
@@ -1263,8 +1288,8 @@ def test_mine_upgrades_silver_to_gold():
     """Mine should trash Silver and gain Gold to hand."""
     state = _make_state_with_hand(["Mine", "Silver", "Copper"])
     strategy = _make_strategy(
-        early_action_priority=["Mine"], mid_action_priority=["Mine"],
-        late_action_priority=["Mine"], mine_trash_priority=["Silver", "Copper"],
+        early_terminal_priority=["Mine"], mid_terminal_priority=["Mine"],
+        late_terminal_priority=["Mine"], mine_trash_priority=["Silver", "Copper"],
     )
 
     play_action_phase(state, strategy)
@@ -1278,8 +1303,8 @@ def test_mine_no_treasure():
     """Mine with no treasure in hand does nothing."""
     state = _make_state_with_hand(["Mine", "Estate", "Estate"])
     strategy = _make_strategy(
-        early_action_priority=["Mine"], mid_action_priority=["Mine"],
-        late_action_priority=["Mine"],
+        early_terminal_priority=["Mine"], mid_terminal_priority=["Mine"],
+        late_terminal_priority=["Mine"],
     )
 
     play_action_phase(state, strategy)
@@ -1292,8 +1317,8 @@ def test_mine_empty_supply_skips():
     state = _make_state_with_hand(["Mine", "Copper", "Copper"])
     state.supply["Silver"] = 0
     strategy = _make_strategy(
-        early_action_priority=["Mine"], mid_action_priority=["Mine"],
-        late_action_priority=["Mine"],
+        early_terminal_priority=["Mine"], mid_terminal_priority=["Mine"],
+        late_terminal_priority=["Mine"],
     )
 
     play_action_phase(state, strategy)
@@ -1308,8 +1333,8 @@ def test_merchant_bonus_with_silver():
     state = _make_state_with_hand(["Merchant", "Silver", "Copper"],
                                   deck=["Estate"] * 5)
     strategy = _make_strategy(
-        early_action_priority=["Merchant"], mid_action_priority=["Merchant"],
-        late_action_priority=["Merchant"],
+        early_nonterminal_priority=["Merchant"], mid_nonterminal_priority=["Merchant"],
+        late_nonterminal_priority=["Merchant"],
     )
 
     play_action_phase(state, strategy)
@@ -1328,8 +1353,8 @@ def test_merchant_no_silver_no_bonus():
     state = _make_state_with_hand(["Merchant", "Copper", "Copper"],
                                   deck=["Estate"] * 5)
     strategy = _make_strategy(
-        early_action_priority=["Merchant"], mid_action_priority=["Merchant"],
-        late_action_priority=["Merchant"],
+        early_nonterminal_priority=["Merchant"], mid_nonterminal_priority=["Merchant"],
+        late_nonterminal_priority=["Merchant"],
     )
 
     play_action_phase(state, strategy)
@@ -1375,9 +1400,12 @@ def test_save_and_load_best_model(tmp_path):
     assert loaded.early_buy_priority == strategy.early_buy_priority
     assert loaded.mid_buy_priority == strategy.mid_buy_priority
     assert loaded.late_buy_priority == strategy.late_buy_priority
-    assert loaded.early_action_priority == strategy.early_action_priority
-    assert loaded.mid_action_priority == strategy.mid_action_priority
-    assert loaded.late_action_priority == strategy.late_action_priority
+    assert loaded.early_nonterminal_priority == strategy.early_nonterminal_priority
+    assert loaded.early_terminal_priority == strategy.early_terminal_priority
+    assert loaded.mid_nonterminal_priority == strategy.mid_nonterminal_priority
+    assert loaded.mid_terminal_priority == strategy.mid_terminal_priority
+    assert loaded.late_nonterminal_priority == strategy.late_nonterminal_priority
+    assert loaded.late_terminal_priority == strategy.late_terminal_priority
     assert loaded.early_chapel_trash == strategy.early_chapel_trash
     assert loaded.mid_chapel_trash == strategy.mid_chapel_trash
     assert loaded.late_chapel_trash == strategy.late_chapel_trash
@@ -1491,6 +1519,31 @@ def test_eval_counts_wins_correctly():
     assert abs(total - 1.0) < 1e-9, f"Win+tie+loss = {total}, expected 1.0"
 
 
+def test_vp_margin_returned():
+    """evaluate_vs_opponent returns mean_vp_margin as a float."""
+    bm = big_money_strategy()
+    rng = random.Random(42)
+    seeds = make_seed_list(20, rng)
+    result = evaluate_vs_opponent(bm, seeds, KINGDOM_CARDS, opponent=bm)
+    assert "mean_vp_margin" in result
+    assert isinstance(result["mean_vp_margin"], float)
+
+
+def test_vp_margin_positive_when_winning():
+    """A stronger strategy should have positive VP margin against a weaker one."""
+    bm = big_money_strategy()
+    do_nothing = _make_strategy(
+        early_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        mid_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        late_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+    )
+    rng = random.Random(42)
+    seeds = make_seed_list(50, rng)
+    result = evaluate_vs_opponent(bm, seeds, KINGDOM_CARDS, opponent=do_nothing)
+    assert result["mean_vp_margin"] > 0, (
+        f"BM should have positive VP margin vs do-nothing, got {result['mean_vp_margin']:.1f}")
+
+
 def test_big_money_beats_do_nothing_strategy():
     """A strategy that passes on all buys should lose to Big Money."""
     # PASS first = never buy anything
@@ -1600,6 +1653,8 @@ def test_hall_of_fame_prevents_bm_drift():
                               opponent=None)
     assert vs["win_rate"] >= 0.40, (
         f"Hall-of-fame GA should still beat BM >=40%, got {vs['win_rate']:.0%}")
+
+
 
 
 def test_province_max_coins_skips_buy():

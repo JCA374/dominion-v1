@@ -63,5 +63,7 @@ KINGDOM_CARDS = [
     "Mine", "Merchant",
 ]
 ACTION_CARDS = [c for c in KINGDOM_CARDS if ALL_CARDS[c].card_type == CardType.ACTION]
+NONTERMINAL_ACTIONS = [c for c in ACTION_CARDS if ALL_CARDS[c].actions > 0]
+TERMINAL_ACTIONS = [c for c in ACTION_CARDS if ALL_CARDS[c].actions == 0]
 
 BUYABLE_CARDS = TREASURE_CARDS + VICTORY_CARDS + KINGDOM_CARDS

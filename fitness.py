@@ -50,11 +50,13 @@ def evaluate_vs_opponent(strategy: Strategy, seed_list: list[int],
     wins = 0
     ties = 0
     total_turns = 0
+    total_vp_margin = 0
     deck_counts: dict[str, int] = {}
     for s in seed_list:
         # Game 1: strategy goes first
         r1 = play_game_2p(strategy, opp, s, kingdom)
         total_turns += r1["turns"]
+        total_vp_margin += r1["vp1"] - r1["vp2"]
         if r1["vp1"] > r1["vp2"]:
             wins += 1
         elif r1["vp1"] == r1["vp2"]:
@@ -65,6 +67,7 @@ def evaluate_vs_opponent(strategy: Strategy, seed_list: list[int],
         # Game 2: strategy goes second
         r2 = play_game_2p(opp, strategy, s, kingdom)
         total_turns += r2["turns"]
+        total_vp_margin += r2["vp2"] - r2["vp1"]
         if r2["vp2"] > r2["vp1"]:
             wins += 1
         elif r2["vp2"] == r2["vp1"]:
@@ -80,6 +83,7 @@ def evaluate_vs_opponent(strategy: Strategy, seed_list: list[int],
         "tie_rate": ties / n,
         "loss_rate": (n - wins - ties) / n,
         "mean_turns": total_turns / n,
+        "mean_vp_margin": total_vp_margin / n,
         "avg_final_deck": avg_deck,
     }
 
@@ -136,11 +140,13 @@ def evaluate_vs_hall(strategy: Strategy, seed_list: list[int],
     avg_tie = sum(r["tie_rate"] for r in all_results) / len(all_results)
     avg_loss = sum(r["loss_rate"] for r in all_results) / len(all_results)
     avg_turns = sum(r["mean_turns"] for r in all_results) / len(all_results)
+    avg_vp_margin = sum(r["mean_vp_margin"] for r in all_results) / len(all_results)
     return {
         "win_rate": avg_win,
         "tie_rate": avg_tie,
         "loss_rate": avg_loss,
         "mean_turns": avg_turns,
+        "mean_vp_margin": avg_vp_margin,
         "avg_final_deck": all_results[0].get("avg_final_deck"),
     }
 

@@ -19,21 +19,23 @@ import random
 
 # === Config ===
 POP_SIZE        = 60 #60
-GENERATIONS     = 10000 #100
+GENERATIONS     = 5000
 GAMES_PER_EVAL  = 80 #50
 TOURNAMENT_SIZE = 3
 ELITE_COUNT     = 2
 MUTATION_RATE   = 0.18
-SEED            = 42
+SEED            = 137
 # All available kingdom cards (12 total — a standard game uses 10)
 ALL_KINGDOM     = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
                    "Throne Room", "Council Room", "Moneylender", "Gardens",
                    "Mine", "Merchant"]
 # Select 10 for training — change this list to train on different kingdoms
 KINGDOM         = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
-                   "Throne Room", "Council Room", "Mine", "Moneylender"]
+                   "Throne Room", "Mine", "Moneylender", "Merchant"]
 HALL_MAX_SIZE   = 6    # Maximum hall of fame opponents
 HALL_ADD_THRESHOLD = 0.55  # Add to hall when win rate exceeds this
+VP_MARGIN_WEIGHT = 0.4  # Blend VP margin into fitness (0=win rate only, 1=margin only)
+SPEED_WEIGHT    = 0.2  # Reward faster wins (25 turns=0, 15 turns=max)
 WORKERS         = 8    # Parallel workers for evaluation (1 = sequential)
 
 
@@ -104,6 +106,10 @@ def main():
         "seed": SEED + start_gen,  # different seed so we don't replay same games
         "hall_max_size": HALL_MAX_SIZE,
         "hall_add_threshold": HALL_ADD_THRESHOLD,
+        "vp_margin_weight": VP_MARGIN_WEIGHT,
+        "speed_weight": SPEED_WEIGHT,
+        "tier2_count": 15,
+        "tier2_seeds": 400,
         "workers": WORKERS,
         "csv_path": "evolution_log.csv",
         "start_gen": start_gen,

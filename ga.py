@@ -114,25 +114,29 @@ def _crossover_targets(t1: dict[str, int], t2: dict[str, int],
     return result
 
 
+
 def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
     """Crossover two strategies into a child."""
     return Strategy(
         early_buy_priority=order_crossover(p1.early_buy_priority, p2.early_buy_priority, rng),
         mid_buy_priority=order_crossover(p1.mid_buy_priority, p2.mid_buy_priority, rng),
         late_buy_priority=order_crossover(p1.late_buy_priority, p2.late_buy_priority, rng),
-        early_action_priority=order_crossover(p1.early_action_priority, p2.early_action_priority, rng),
-        mid_action_priority=order_crossover(p1.mid_action_priority, p2.mid_action_priority, rng),
-        late_action_priority=order_crossover(p1.late_action_priority, p2.late_action_priority, rng),
-        early_chapel_trash=order_crossover(p1.early_chapel_trash, p2.early_chapel_trash, rng),
-        mid_chapel_trash=order_crossover(p1.mid_chapel_trash, p2.mid_chapel_trash, rng),
-        late_chapel_trash=order_crossover(p1.late_chapel_trash, p2.late_chapel_trash, rng),
+        early_nonterminal_priority=order_crossover(p1.early_nonterminal_priority, p2.early_nonterminal_priority, rng),
+        early_terminal_priority=order_crossover(p1.early_terminal_priority, p2.early_terminal_priority, rng),
+        mid_nonterminal_priority=order_crossover(p1.mid_nonterminal_priority, p2.mid_nonterminal_priority, rng),
+        mid_terminal_priority=order_crossover(p1.mid_terminal_priority, p2.mid_terminal_priority, rng),
+        late_nonterminal_priority=order_crossover(p1.late_nonterminal_priority, p2.late_nonterminal_priority, rng),
+        late_terminal_priority=order_crossover(p1.late_terminal_priority, p2.late_terminal_priority, rng),
+        early_chapel_trash=["Estate", "Copper", "STOP"],
+        mid_chapel_trash=["Estate", "Copper", "STOP"],
+        late_chapel_trash=["STOP"],
         throne_room_priority=order_crossover(
             p1.throne_room_priority, p2.throne_room_priority, rng
         ),
         mine_trash_priority=order_crossover(
             p1.mine_trash_priority, p2.mine_trash_priority, rng
         ),
-        chapel_max_trash=rng.choice([p1.chapel_max_trash, p2.chapel_max_trash]),
+        chapel_max_trash=4,
         transitions=Transitions(
             early_to_mid_turn=rng.choice([
                 p1.transitions.early_to_mid_turn,
@@ -187,19 +191,19 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
     s.early_buy_priority = _mutate_list(s.early_buy_priority, rate, rng)
     s.mid_buy_priority = _mutate_list(s.mid_buy_priority, rate, rng)
     s.late_buy_priority = _mutate_list(s.late_buy_priority, rate, rng)
-    s.early_action_priority = _mutate_list(s.early_action_priority, rate, rng, allow_pass=False)
-    s.mid_action_priority = _mutate_list(s.mid_action_priority, rate, rng, allow_pass=False)
-    s.late_action_priority = _mutate_list(s.late_action_priority, rate, rng, allow_pass=False)
-    s.early_chapel_trash = _mutate_list(s.early_chapel_trash, rate, rng, allow_pass=False)
-    s.mid_chapel_trash = _mutate_list(s.mid_chapel_trash, rate, rng, allow_pass=False)
-    s.late_chapel_trash = _mutate_list(s.late_chapel_trash, rate, rng, allow_pass=False)
+    s.early_nonterminal_priority = _mutate_list(s.early_nonterminal_priority, rate, rng, allow_pass=False)
+    s.early_terminal_priority = _mutate_list(s.early_terminal_priority, rate, rng, allow_pass=False)
+    s.mid_nonterminal_priority = _mutate_list(s.mid_nonterminal_priority, rate, rng, allow_pass=False)
+    s.mid_terminal_priority = _mutate_list(s.mid_terminal_priority, rate, rng, allow_pass=False)
+    s.late_nonterminal_priority = _mutate_list(s.late_nonterminal_priority, rate, rng, allow_pass=False)
+    s.late_terminal_priority = _mutate_list(s.late_terminal_priority, rate, rng, allow_pass=False)
+    # Chapel trash is hardcoded — no mutation
+    s.early_chapel_trash = ["Estate", "Copper", "STOP"]
+    s.mid_chapel_trash = ["Estate", "Copper", "STOP"]
+    s.late_chapel_trash = ["STOP"]
+    s.chapel_max_trash = 4
     s.throne_room_priority = _mutate_list(s.throne_room_priority, rate, rng, allow_pass=False)
     s.mine_trash_priority = _mutate_list(s.mine_trash_priority, rate, rng, allow_pass=False)
-
-    # Jitter chapel_max_trash (min 1 so chapel always has selection pressure)
-    if rng.random() < rate:
-        s.chapel_max_trash += rng.choice([-1, 0, 1])
-        s.chapel_max_trash = max(1, min(4, s.chapel_max_trash))
 
     # Jitter transitions (occasional large jumps to escape sticky boundaries)
     if rng.random() < rate:
@@ -256,6 +260,10 @@ def run_ga(config: dict) -> dict:
     workers = config.get("workers", 1)
     hall_max_size = config.get("hall_max_size", 6)
     hall_add_threshold = config.get("hall_add_threshold", 0.55)
+    vp_margin_weight = config.get("vp_margin_weight", 0.0)
+
+    tier2_count = min(config.get("tier2_count", 15), pop_size)  # top N re-evaluated in tier 2
+    tier2_seeds = config.get("tier2_seeds", 400)      # seeds for tier 2 (× 2 = 800 games)
 
     start_gen = config.get("start_gen", 0)
     initial_population = config.get("initial_population")
@@ -299,15 +307,41 @@ def run_ga(config: dict) -> dict:
             eval_results = evaluate_population_vs_hall(
                 population, seed_list, kingdom, hall=hall, workers=workers)
 
-            fitnesses = [r["win_rate"] for r in eval_results]
+            # Blended fitness: win rate + VP margin + speed bonus
+            speed_weight = config.get("speed_weight", 0.0)
+            def _blended(r):
+                f = r["win_rate"]
+                if vp_margin_weight > 0:
+                    margin_norm = max(0.0, min(1.0, (r["mean_vp_margin"] + 20) / 40))
+                    f = (1 - vp_margin_weight - speed_weight) * r["win_rate"] + vp_margin_weight * margin_norm
+                else:
+                    f = (1 - speed_weight) * r["win_rate"]
+                if speed_weight > 0:
+                    speed_norm = max(0.0, min(1.0, (25 - r["mean_turns"]) / 10))
+                    f += speed_weight * speed_norm
+                return f
+            fitnesses = [_blended(r) for r in eval_results]
 
-            # Stats
-            best_idx = max(range(pop_size), key=lambda i: fitnesses[i])
-            best_fitness = fitnesses[best_idx]
+            # --- Tier 2: re-evaluate top candidates with more games ---
+            ranked_t1 = sorted(range(pop_size), key=lambda i: fitnesses[i], reverse=True)
+            tier2_indices = ranked_t1[:tier2_count]
+            tier2_seed_list = make_seed_list(tier2_seeds, master_rng)
+            tier2_population = [population[i] for i in tier2_indices]
+            tier2_results = evaluate_population_vs_hall(
+                tier2_population, tier2_seed_list, kingdom, hall=hall, workers=workers)
+            tier2_fitnesses = [_blended(r) for r in tier2_results]
+
+            # Use tier 2 to find the true best
+            tier2_best_local = max(range(tier2_count), key=lambda i: tier2_fitnesses[i])
+            best_idx = tier2_indices[tier2_best_local]
+            best_fitness = tier2_fitnesses[tier2_best_local]
+            best_eval_result = tier2_results[tier2_best_local]
+
+            # Stats (tier 1 for population-level metrics)
             mean_fitness = sum(fitnesses) / pop_size
             worst_fitness = min(fitnesses)
             best_strat = population[best_idx]
-            best_turns = eval_results[best_idx]["mean_turns"]
+            best_turns = best_eval_result["mean_turns"]
 
             # Log entry
             entry = {
@@ -356,13 +390,13 @@ def run_ga(config: dict) -> dict:
 
             # Save best model to disk whenever we find a new best
             if new_best:
-                vs_stats = {"win_rate": best_fitness,
-                            "tie_rate": eval_results[best_idx]["tie_rate"],
-                            "loss_rate": eval_results[best_idx]["loss_rate"],
+                vs_stats = {"win_rate": best_eval_result["win_rate"],
+                            "tie_rate": best_eval_result["tie_rate"],
+                            "loss_rate": best_eval_result["loss_rate"],
                             "mean_turns": best_turns,
-                            "num_games": games_per_eval * 2,
+                            "num_games": tier2_seeds * 2,
                             "opponent": f"hall({len(hall)})",
-                            "avg_final_deck": eval_results[best_idx].get("avg_final_deck")}
+                            "avg_final_deck": best_eval_result.get("avg_final_deck")}
                 gen_dir = os.path.join(best_model_dir, f"gen_{gen:03d}")
                 save_best_model(best_strat, vs_stats, output_dir=gen_dir)
                 # Also save as "latest" for easy access
@@ -393,9 +427,10 @@ def run_ga(config: dict) -> dict:
                       f"injecting {STAGNATION_INJECT} randoms <<<")
 
             # --- Selection + reproduction ---
-            # Sort by fitness for elitism
-            ranked = sorted(range(pop_size), key=lambda i: fitnesses[i], reverse=True)
-            elites = [deepcopy(population[ranked[i]]) for i in range(elite_count)]
+            # Elites from tier 2 ranking (most reliable fitness estimates)
+            tier2_ranked = [tier2_indices[i] for i in
+                           sorted(range(tier2_count), key=lambda i: tier2_fitnesses[i], reverse=True)]
+            elites = [deepcopy(population[tier2_ranked[i]]) for i in range(elite_count)]
 
             new_pop = list(elites)
 

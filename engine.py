@@ -148,15 +148,12 @@ def trash_card(state: GameState, card_name: str) -> None:
 # Strategy-driven phases — used by GA / AI opponents
 # ---------------------------------------------------------------------------
 
-def play_action_phase(state: GameState, strategy: Strategy) -> None:
-    """Play action cards from hand following phase-specific action priority."""
-    from strategy import get_current_phase, get_action_priority
-    phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
-    action_priority = get_action_priority(strategy, phase)
-
+def _play_action_tier(state: GameState, strategy: Strategy,
+                      priority: list[str], phase: str) -> None:
+    """Play actions from a single tier (nonterminal or terminal)."""
     while state.actions > 0:
         played = False
-        for card_name in action_priority:
+        for card_name in priority:
             if card_name in state.hand and state.actions > 0:
                 resolve_action(state, card_name)
 
@@ -173,6 +170,16 @@ def play_action_phase(state: GameState, strategy: Strategy) -> None:
                 break  # re-scan from top of priority list
         if not played:
             break
+
+
+def play_action_phase(state: GameState, strategy: Strategy) -> None:
+    """Play action cards: all non-terminals first, then terminals."""
+    from strategy import get_current_phase, get_action_priorities
+    phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
+    nt_priority, t_priority = get_action_priorities(strategy, phase)
+
+    _play_action_tier(state, strategy, nt_priority, phase)
+    _play_action_tier(state, strategy, t_priority, phase)
 
 
 def play_moneylender(state: GameState) -> bool:
