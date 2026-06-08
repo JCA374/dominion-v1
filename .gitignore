@@ -5,3 +5,4 @@ best_model/gen_*/
 evolution_log.csv
 *.png
 !best_model/buy_heatmap.png
+!demo/buy_heatmap.png

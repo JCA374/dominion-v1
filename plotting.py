@@ -93,19 +93,36 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
     cards = non_pass + (["PASS"] if "PASS" in seen else [])
 
     data = np.full((len(cards), 3), np.nan)
+    after_pass = np.zeros((len(cards), 3), dtype=bool)
 
     for col, priority_list in enumerate(lists):
+        past_pass = False
         for rank, card_name in enumerate(priority_list):
+            if card_name == "PASS":
+                past_pass = True
             if card_name in seen:
                 row = cards.index(card_name)
                 data[row, col] = rank + 1  # 1-indexed rank
+                if past_pass and card_name != "PASS":
+                    after_pass[row, col] = True
 
     buy_targets = strategy.buy_targets
 
     fig, ax = plt.subplots(figsize=(6, max(4, len(cards) * 0.4)), layout="constrained")
     cmap = plt.cm.RdYlGn_r  # lower rank (higher priority) = green
     n_items = max(len(lst) for lst in lists)
-    im = ax.imshow(data, cmap=cmap, aspect="auto", vmin=1, vmax=n_items)
+
+    # Grey out cells after PASS by overlaying them
+    display = data.copy()
+    display[after_pass] = np.nan  # hide from colormap
+    im = ax.imshow(display, cmap=cmap, aspect="auto", vmin=1, vmax=n_items)
+
+    # Draw grey background for after-PASS cells
+    for i in range(len(cards)):
+        for j in range(3):
+            if after_pass[i, j]:
+                ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1,
+                                           facecolor="#e0e0e0", edgecolor="none"))
 
     ax.set_xticks(range(3))
     t = strategy.transitions
@@ -139,9 +156,13 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
     for i in range(len(cards)):
         for j in range(3):
             if not np.isnan(data[i, j]):
-                ax.text(j, i, f"{int(data[i, j])}", ha="center", va="center",
-                        fontsize=9, fontweight="bold",
-                        color="white" if data[i, j] > n_items / 2 else "black")
+                if after_pass[i, j]:
+                    ax.text(j, i, f"{int(data[i, j])}", ha="center", va="center",
+                            fontsize=9, color="#aaaaaa", fontstyle="italic")
+                else:
+                    ax.text(j, i, f"{int(data[i, j])}", ha="center", va="center",
+                            fontsize=9, fontweight="bold",
+                            color="white" if data[i, j] > n_items / 2 else "black")
 
     ax.set_title("Buy Priority Rank by Phase (1 = highest)")
     fig.colorbar(im, ax=ax, label="Rank", shrink=0.6)
