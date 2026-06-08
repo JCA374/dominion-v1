@@ -1,8 +1,27 @@
 # Dominion GA — Quick Reference
 
-## Training (`main.py`)
+## How It Works
 
-Train a strategy using a genetic algorithm:
+A genetic algorithm evolves Dominion strategies by playing thousands of games.
+The GA is the core of this project — it produces `best_model/strategy.json`,
+which the play modes then load and use as an AI opponent.
+
+```
+GA (main.py)  --->  best_model/strategy.json  --->  play.py / gui.py / trace.py
+    |                                                     |
+    |  evolves strategies using engine.py                 |  loads strategy, plays
+    |  (fitness, selection, crossover, mutation)           |  against it using engine.py
+```
+
+All modes share the same game engine (`engine.py`) — the GA trains on it,
+and the play modes run on it, so the AI you play against behaves exactly
+as it was trained.
+
+---
+
+## 1. Training — the GA (`main.py`)
+
+Train a strategy using the genetic algorithm:
 
 ```bash
 python main.py              # fresh training run (1000 generations)
@@ -10,34 +29,57 @@ python main.py --continue   # continue from best_model/, keeps generation number
 ```
 
 Config is at the top of `main.py` — population size, mutation rate, kingdom cards, etc.
-Outputs: `best_model/strategy.json`, `evolution_log.csv`, and PNG plots.
 
-## Game Trace (`trace.py`)
+**Outputs:**
+- `best_model/strategy.json` — the evolved strategy (used by all play modes)
+- `best_model/summary.txt` — human-readable description
+- `best_model/buy_heatmap.png` — what the strategy buys per phase
+- `evolution_log.csv` — fitness over generations
+- PNG plots of fitness and transitions
 
-Watch the AI play a full game turn-by-turn in the terminal:
+## 2. Playing Against the AI
 
-```bash
-python trace.py                # best model vs Big Money
-python trace.py --seed 123     # specific seed for reproducibility
-python trace.py --vs self      # best model vs a copy of itself
-python trace.py --vs prev      # best model vs previous generation
-python trace.py --vs 42        # best model vs gen 42
-python trace.py --list          # list available generations
-python trace.py --model path/to/strategy.json  # use a different model
-```
+Both play modes load `best_model/strategy.json` and let you play against it.
 
-Shows a chat-style layout — model actions on the left, opponent on the right.
-
-## Interactive Play (`play.py`)
-
-Play Dominion against the evolved AI yourself:
+### Terminal (`play.py`)
 
 ```bash
 python play.py
 ```
 
-Discovers all saved models under `best_model/` and lets you pick one to play against.
-You make action/buy/chapel decisions interactively; the AI uses its evolved strategy.
+Text-based interactive game. Pick an opponent from saved models, then make
+action/buy/chapel decisions via numbered menus.
+
+### Graphical (`gui.py`)
+
+```bash
+python gui.py               # requires: pip install pygame
+```
+
+Pygame window. Click cards in your hand to play actions, click supply piles
+to buy. Press R to restart, Q to quit.
+
+## 3. Watching the AI Play (`trace.py`)
+
+Watch two AI strategies play a full game turn-by-turn:
+
+```bash
+python trace.py                # best model vs Big Money
+python trace.py --seed 123     # specific seed for reproducibility
+python trace.py --vs self      # best model vs itself
+python trace.py --vs prev      # best model vs previous generation
+python trace.py --vs 42        # best model vs gen 42
+python trace.py --list         # list available generations
+python trace.py --model path/to/strategy.json
+```
+
+## 4. Other Tools
+
+- `python benchmark.py` — measure sequential vs parallel evaluation speed
+- `python plot_evolution.py` — interactive Plotly chart of buy priority evolution
+- `python test_smoke.py` — run smoke tests
+
+---
 
 ## Kingdom Cards
 
@@ -65,8 +107,17 @@ and replaced with Throne Room.
 
 Militia and Moat are excluded — no attack/reaction cards in this simplified engine.
 
-## Other Tools
+## Project Files
 
-- `python benchmark.py` — measure sequential vs parallel evaluation speed
-- `python plot_evolution.py` — interactive Plotly chart of how buy priorities evolved
-- `python test_smoke.py` — run smoke tests
+| File | Purpose |
+|------|---------|
+| `engine.py` | Game rules — shared by GA and all play modes |
+| `cards.py` | Card definitions (18 cards) |
+| `strategy.py` | Strategy genome, phase logic, I/O |
+| `main.py` | GA entry point + config |
+| `ga.py` | GA: selection, crossover, mutation |
+| `fitness.py` | Game simulation and win-rate evaluation |
+| `play.py` | Terminal interactive play |
+| `gui.py` | Graphical interactive play (pygame) |
+| `trace.py` | AI vs AI game trace viewer |
+| `plotting.py` | Fitness/transition/heatmap plots |
