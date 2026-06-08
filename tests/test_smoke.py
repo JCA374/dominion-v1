@@ -2,25 +2,25 @@
 
 import random
 
-from cards import (ALL_CARDS, BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS,
+from core.cards import (ALL_CARDS, BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS,
                     NONTERMINAL_ACTIONS, TERMINAL_ACTIONS, CardType,
                     CARD_ID, CARD_NAME, NUM_CARDS, PASS_ID, STOP_ID,
                     CARD_COST, CARD_COINS, CARD_VP, CARD_DRAW,
                     CARD_ACTIONS, CARD_BUYS, CARD_TYPE_ID, CARD_SPECIAL_ID)
-from engine import (
+from core.engine import (
     new_game, play_game, play_game_2p, play_action_phase, play_buy_phase,
     play_chapel, play_moneylender, play_throne_room, play_mine,
     auto_play_treasures, cleanup,
     is_game_over, count_vp, default_supply, GameState, draw_cards,
 )
-from strategy import (
+from core.strategy import (
     Strategy, Transitions, get_current_phase, random_strategy,
     big_money_strategy, engine_strategy, describe,
     save_best_model, load_strategy, get_action_priority,
     get_chapel_trash_priority,
 )
-from fitness import evaluate, evaluate_vs_opponent, make_seed_list, USE_C_ENGINE
-from ga import order_crossover, mutate, crossover, init_population
+from ga.fitness import evaluate, evaluate_vs_opponent, make_seed_list, USE_C_ENGINE
+from ga.ga import order_crossover, mutate, crossover, init_population
 
 
 def test_card_definitions():
@@ -270,7 +270,7 @@ def test_mutation_validity():
 
 def test_short_ga_run():
     """5-generation mini run completes without errors."""
-    from ga import run_ga
+    from ga.ga import run_ga
 
     result = run_ga({
         "pop_size": 10,
@@ -1377,7 +1377,7 @@ def test_save_and_load_best_model(tmp_path):
 def test_hall_of_fame_adds_member_when_threshold_met():
     """GA adds strategy to hall when win rate >= hall_add_threshold."""
     from unittest.mock import patch
-    from ga import run_ga
+    from ga.ga import run_ga
 
     def fake_evaluate_population_vs_hall(population, seed_list, kingdom,
                                          hall=None, workers=1):
@@ -1390,8 +1390,8 @@ def test_hall_of_fame_adds_member_when_threshold_met():
             })
         return results
 
-    with patch("ga.evaluate_population_vs_hall", fake_evaluate_population_vs_hall), \
-         patch("ga.save_best_model"):
+    with patch("ga.ga.evaluate_population_vs_hall", fake_evaluate_population_vs_hall), \
+         patch("ga.ga.save_best_model"):
         result = run_ga({
             "pop_size": 6,
             "generations": 5,
@@ -1413,7 +1413,7 @@ def test_hall_of_fame_adds_member_when_threshold_met():
 def test_hall_of_fame_respects_max_size():
     """Hall of fame does not exceed hall_max_size."""
     from unittest.mock import patch
-    from ga import run_ga
+    from ga.ga import run_ga
 
     def fake_evaluate_population_vs_hall(population, seed_list, kingdom,
                                          hall=None, workers=1):
@@ -1425,8 +1425,8 @@ def test_hall_of_fame_respects_max_size():
             })
         return results
 
-    with patch("ga.evaluate_population_vs_hall", fake_evaluate_population_vs_hall), \
-         patch("ga.save_best_model"):
+    with patch("ga.ga.evaluate_population_vs_hall", fake_evaluate_population_vs_hall), \
+         patch("ga.ga.save_best_model"):
         result = run_ga({
             "pop_size": 6,
             "generations": 10,
@@ -1513,7 +1513,7 @@ def test_big_money_beats_do_nothing_strategy():
 
 def test_big_money_wins_as_both_p1_and_p2():
     """Verify evaluate_vs_opponent counts wins correctly from both positions."""
-    from engine import play_game_2p
+    from core.engine import play_game_2p
 
     bm = big_money_strategy()
     do_nothing = _make_strategy(
@@ -1533,7 +1533,7 @@ def test_big_money_wins_as_both_p1_and_p2():
 
 def test_buy_target_zero_blocks_purchase():
     """buy_targets={card: 0} should prevent the strategy from ever buying that card."""
-    from engine import play_game_2p
+    from core.engine import play_game_2p
 
     # Strategy that wants Province first but has buy_target=0 for Province
     pgs = ["Province", "Gold", "Silver"] + [
@@ -1552,7 +1552,7 @@ def test_buy_target_zero_blocks_purchase():
 
 def test_ga_best_strategy_beats_big_money():
     """GA output must beat Big Money >= 50%."""
-    from ga import run_ga
+    from ga.ga import run_ga
 
     result = run_ga({
         "pop_size": 20,
@@ -1579,7 +1579,7 @@ def test_ga_best_strategy_beats_big_money():
 
 def test_hall_of_fame_prevents_bm_drift():
     """GA with hall of fame (BM always in hall) must still beat Big Money."""
-    from ga import run_ga
+    from ga.ga import run_ga
 
     result = run_ga({
         "pop_size": 20,
@@ -1712,7 +1712,7 @@ def test_c_engine_available():
 
 def test_c_engine_strategy_serialization():
     """strategy_to_ints produces a valid array of the expected size."""
-    from c_bridge import strategy_to_ints, STRATEGY_SIZE
+    from ga.c_bridge import strategy_to_ints, STRATEGY_SIZE
 
     for strat_fn in [big_money_strategy, engine_strategy]:
         strat = strat_fn()
@@ -1725,7 +1725,7 @@ def test_c_engine_strategy_serialization():
 
 def test_c_engine_big_money_vs_self_balanced():
     """Big Money vs itself via C engine should win ~50%."""
-    from c_bridge import evaluate_vs_opponent_c
+    from ga.c_bridge import evaluate_vs_opponent_c
 
     bm = big_money_strategy()
     seeds = make_seed_list(200, random.Random(42))
@@ -1736,7 +1736,7 @@ def test_c_engine_big_money_vs_self_balanced():
 
 def test_c_engine_win_loss_tie_sum():
     """C engine results: win + tie + loss = 1.0."""
-    from c_bridge import evaluate_vs_opponent_c
+    from ga.c_bridge import evaluate_vs_opponent_c
 
     bm = big_money_strategy()
     seeds = make_seed_list(50, random.Random(42))
@@ -1747,7 +1747,7 @@ def test_c_engine_win_loss_tie_sum():
 
 def test_c_engine_stronger_strategy_wins():
     """C engine: Big Money should beat a do-nothing strategy."""
-    from c_bridge import evaluate_vs_opponent_c
+    from ga.c_bridge import evaluate_vs_opponent_c
 
     bm = big_money_strategy()
     do_nothing = _make_strategy(
@@ -1764,7 +1764,7 @@ def test_c_engine_stronger_strategy_wins():
 
 def test_c_engine_random_strategies_complete():
     """C engine handles 20 random strategies without crashing."""
-    from c_bridge import evaluate_vs_opponent_c
+    from ga.c_bridge import evaluate_vs_opponent_c
 
     bm = big_money_strategy()
     seeds = make_seed_list(20, random.Random(42))
@@ -1783,7 +1783,7 @@ def test_c_engine_consistent_with_python():
     py_result = evaluate_vs_opponent(bm, seeds, KINGDOM_CARDS, opponent=bm,
                                      need_deck=True)
 
-    from c_bridge import evaluate_vs_opponent_c
+    from ga.c_bridge import evaluate_vs_opponent_c
     c_result = evaluate_vs_opponent_c(bm, seeds, KINGDOM_CARDS, opponent=bm)
 
     # Both should be roughly balanced (different RNGs, so not exact)

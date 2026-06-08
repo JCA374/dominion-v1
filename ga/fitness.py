@@ -9,17 +9,17 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from typing import TYPE_CHECKING
 
-from engine import play_game, play_game_2p
-from strategy import big_money_strategy
+from core.engine import play_game, play_game_2p
+from core.strategy import big_money_strategy
 
 try:
-    from c_bridge import evaluate_vs_opponent_c
+    from ga.c_bridge import evaluate_vs_opponent_c
     USE_C_ENGINE = True
 except (ImportError, OSError) as e:
     USE_C_ENGINE = False
 
 if TYPE_CHECKING:
-    from strategy import Strategy
+    from core.strategy import Strategy
 
 
 def make_seed_list(num_games: int, master_rng: random.Random) -> list[int]:

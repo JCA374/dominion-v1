@@ -6,8 +6,8 @@ import random
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 
-from strategy import random_strategy, big_money_strategy
-from fitness import evaluate_vs_opponent, make_seed_list
+from core.strategy import random_strategy, big_money_strategy
+from ga.fitness import evaluate_vs_opponent, make_seed_list
 
 
 def _eval_one(strategy, seed_list, kingdom, opponent):

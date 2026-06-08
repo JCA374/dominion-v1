@@ -7,19 +7,18 @@ The GA is the core of this project — it produces `best_model/strategy.json`,
 which the play modes then load and use as an AI opponent.
 
 ```
-GA (main.py)  --->  best_model/strategy.json  --->  play.py / gui.py / trace.py
+GA (train.py)  --->  best_model/strategy.json  --->  play.py / gui.py / trace.py
     |                                                     |
-    |  evolves strategies using engine.py                 |  loads strategy, plays
-    |  (fitness, selection, crossover, mutation)           |  against it using engine.py
+    |  evolves strategies using C engine                  |  loads strategy, plays
+    |  (fitness, selection, crossover, mutation)           |  against it using Python engine
 ```
 
-All modes share the same game engine (`engine.py`) — the GA trains on it,
-and the play modes run on it, so the AI you play against behaves exactly
-as it was trained.
+All modes share the same game logic — the GA trains on the C engine (~50x faster),
+and the play modes run on the Python engine, so gameplay is identical.
 
 ---
 
-## 1. Training — the GA (`main.py`)
+## 1. Training — the GA (`train.py`)
 
 ### Build the C engine first (one-time)
 
@@ -36,11 +35,11 @@ Falls back to the Python engine if compilation fails.
 ### Run training
 
 ```bash
-python main.py              # fresh training run (10000 generations)
-python main.py --continue   # continue from best_model/, keeps generation numbering
+python train.py              # fresh training run (10000 generations)
+python train.py --continue   # continue from best_model/, keeps generation numbering
 ```
 
-Config is at the top of `main.py` — population size, mutation rate, kingdom cards, etc.
+Config is at the top of `ga/main.py` — population size, mutation rate, kingdom cards, etc.
 
 **Outputs:**
 - `best_model/strategy.json` — the evolved strategy (used by all play modes)
@@ -88,14 +87,14 @@ python trace.py --model path/to/strategy.json
 ## 4. Other Tools
 
 - `python benchmark.py` — measure sequential vs parallel evaluation speed
-- `python plot_evolution.py` — interactive Plotly chart of buy priority evolution
-- `python test_smoke.py` — run smoke tests
+- `python viz/plot_evolution.py` — interactive Plotly chart of buy priority evolution
+- `python -m pytest tests/` — run smoke tests
 
 ---
 
 ## Kingdom Cards
 
-12 kingdom cards available (a standard game uses 10 — configure in `main.py`):
+12 kingdom cards available (a standard game uses 10 — configure in `ga/main.py`):
 
 | Card | Cost | Type | Effect |
 |------|------|------|--------|
@@ -112,27 +111,43 @@ python trace.py --model path/to/strategy.json
 | Festival | $5 | Action | +2 actions, +1 buy, +$2 |
 | Council Room | $5 | Action | +4 cards, +1 buy |
 
-Set `KINGDOM` in `main.py` to pick which 10 to train on. `ALL_KINGDOM` lists all 12.
+Set `KINGDOM` in `ga/main.py` to pick which 10 to train on. `ALL_KINGDOM` lists all 12.
 
 Woodcutter was removed (dropped from the Dominion 2nd edition base set)
 and replaced with Throne Room.
 
 Militia and Moat are excluded — no attack/reaction cards in this simplified engine.
 
-## Project Files
+## Project Structure
 
-| File | Purpose |
-|------|---------|
-| `engine.py` | Python game engine — used by interactive play modes |
-| `dominion.c` | C game engine — fast evaluation for GA training (~50x faster) |
-| `c_bridge.py` | Python-C bridge (ctypes), strategy serialization |
-| `Makefile` | Builds `dominion.so` from `dominion.c` |
-| `cards.py` | Card definitions (18 cards) + integer ID mappings |
-| `strategy.py` | Strategy genome, phase logic, I/O |
-| `main.py` | GA entry point + config |
-| `ga.py` | GA: selection, crossover, mutation |
-| `fitness.py` | Game simulation and win-rate evaluation (auto-uses C engine) |
-| `play.py` | Terminal interactive play |
-| `gui.py` | Graphical interactive play (pygame) |
-| `trace.py` | AI vs AI game trace viewer |
-| `plotting.py` | Fitness/transition/heatmap plots |
+```
+core/               Game foundation
+  cards.py          Card definitions (18 cards) + integer ID mappings
+  engine.py         Python game engine — used by interactive play modes
+  strategy.py       Strategy genome, phase logic, I/O
+
+ga/                 GA training pipeline
+  main.py           GA entry point + config
+  ga.py             Selection, crossover, mutation
+  fitness.py        Game simulation and win-rate evaluation (auto-uses C engine)
+  c_bridge.py       Python-C bridge (ctypes), strategy serialization
+
+play/               Interactive play modes
+  terminal.py       Terminal interactive play
+  gui.py            Graphical interactive play (pygame)
+  trace.py          AI vs AI game trace viewer
+
+viz/                Visualization
+  plotting.py       Fitness/transition/heatmap plots
+  plot_evolution.py Interactive Plotly chart of buy priority evolution
+
+c/                  C engine source
+  dominion.c        C game engine — fast evaluation for GA training (~50x faster)
+  Makefile          Builds dominion.so
+
+tests/
+  test_smoke.py     Smoke tests for all components
+```
+
+Root-level entry scripts (`train.py`, `play.py`, `gui.py`, `trace.py`) delegate
+to the corresponding modules.

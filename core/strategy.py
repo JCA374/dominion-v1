@@ -7,7 +7,7 @@ import os
 import random
 from dataclasses import dataclass, asdict, field
 
-from cards import (BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS, TREASURE_CARDS,
+from core.cards import (BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS, TREASURE_CARDS,
                     VICTORY_CARDS, ALL_CARDS, CardType)
 
 
@@ -340,7 +340,7 @@ def describe(strategy: Strategy, fitness: float | None = None) -> str:
 
 def summarize(strategy: Strategy, vs_bm: dict) -> str:
     """Plain-English summary of what the evolved strategy does and why it works."""
-    from cards import ALL_CARDS, CardType
+    from core.cards import ALL_CARDS, CardType
 
     t = strategy.transitions
     lines = []
@@ -492,7 +492,7 @@ def summarize(strategy: Strategy, vs_bm: dict) -> str:
 def save_best_model(strategy: Strategy, vs_bm: dict,
                     output_dir: str = "best_model") -> None:
     """Save the best strategy as JSON + text summary + buy heatmap."""
-    from plotting import plot_buy_heatmap
+    from viz.plotting import plot_buy_heatmap
 
     os.makedirs(output_dir, exist_ok=True)
 

@@ -1,10 +1,7 @@
-CC = gcc
-CFLAGS = -O3 -shared -fPIC -Wall
-
-dominion.so: dominion.c
-	$(CC) $(CFLAGS) -o $@ $<
+dominion.so:
+	$(MAKE) -C c
 
 clean:
-	rm -f dominion.so
+	$(MAKE) -C c clean
 
 .PHONY: clean

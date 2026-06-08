@@ -8,9 +8,9 @@ import random
 from copy import deepcopy
 from dataclasses import asdict
 
-from cards import BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS
-from fitness import (evaluate_population_vs_hall, make_seed_list)
-from strategy import (
+from core.cards import BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS
+from ga.fitness import (evaluate_population_vs_hall, make_seed_list)
+from core.strategy import (
     Strategy, Transitions, random_strategy, big_money_strategy,
     engine_strategy, gardens_strategy, describe, get_current_phase,
     save_best_model,

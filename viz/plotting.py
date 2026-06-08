@@ -11,10 +11,10 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
 
-from cards import BUYABLE_CARDS, ALL_CARDS
+from core.cards import BUYABLE_CARDS, ALL_CARDS
 
 if TYPE_CHECKING:
-    from strategy import Strategy
+    from core.strategy import Strategy
 
 
 def plot_fitness(log: list[dict], filename: str = "fitness.png") -> None:
@@ -173,8 +173,8 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
 def plot_game_trace(strategy: Strategy, seed: int,
                     filename: str = "game_trace.png") -> None:
     """Deck composition (treasure/action/VP count) turn by turn."""
-    from engine import new_game, play_action_phase, play_buy_phase, cleanup, is_game_over
-    from cards import ALL_CARDS, CardType
+    from core.engine import new_game, play_action_phase, play_buy_phase, cleanup, is_game_over
+    from core.cards import ALL_CARDS, CardType
 
     state = new_game(seed)
     trace = {"turn": [], "treasure": [], "action": [], "victory": [], "total": []}

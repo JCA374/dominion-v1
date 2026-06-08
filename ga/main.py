@@ -10,10 +10,10 @@ import re
 import time
 
 from copy import deepcopy
-from ga import run_ga, mutate
-from strategy import describe, summarize, save_best_model, load_strategy, random_strategy
-from plotting import save_all_plots
-from fitness import evaluate_vs_opponent, evaluate_vs_hall, make_seed_list
+from ga.ga import run_ga, mutate
+from core.strategy import describe, summarize, save_best_model, load_strategy, random_strategy
+from viz.plotting import save_all_plots
+from ga.fitness import evaluate_vs_opponent, evaluate_vs_hall, make_seed_list
 import os
 import random
 

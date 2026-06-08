@@ -6,10 +6,10 @@ import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from cards import ALL_CARDS, CardType, KINGDOM_CARDS
+from core.cards import ALL_CARDS, CardType, KINGDOM_CARDS
 
 if TYPE_CHECKING:
-    from strategy import Strategy
+    from core.strategy import Strategy
 
 
 @dataclass
@@ -174,7 +174,7 @@ def _play_action_tier(state: GameState, strategy: Strategy,
 
 def play_action_phase(state: GameState, strategy: Strategy) -> None:
     """Play action cards: all non-terminals first, then terminals."""
-    from strategy import get_current_phase, get_action_priorities
+    from core.strategy import get_current_phase, get_action_priorities
     phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
     nt_priority, t_priority = get_action_priorities(strategy, phase)
 
@@ -251,7 +251,7 @@ def play_throne_room(state: GameState, strategy: Strategy,
 def play_chapel(state: GameState, strategy: Strategy,
                 phase: str = "early") -> None:
     """Trash up to chapel_max_trash cards from hand following phase-specific trash priority."""
-    from strategy import get_chapel_trash_priority
+    from core.strategy import get_chapel_trash_priority
     chapel_trash_priority = get_chapel_trash_priority(strategy, phase)
     max_trash = min(strategy.chapel_max_trash, 4)
     trashed = 0
@@ -268,7 +268,7 @@ def play_buy_phase(state: GameState, strategy: Strategy) -> None:
     auto_play_treasures(state)
 
     # Determine current phase
-    from strategy import get_current_phase, get_buy_priority
+    from core.strategy import get_current_phase, get_buy_priority
     phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
     buy_priority = get_buy_priority(strategy, phase)
 

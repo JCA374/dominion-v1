@@ -11,7 +11,7 @@ import os
 import subprocess
 from typing import TYPE_CHECKING
 
-from cards import (
+from core.cards import (
     ALL_CARDS, CARD_ID, NUM_CARDS, PASS_ID, STOP_ID,
     CARD_COST, CARD_COINS, CARD_VP, CARD_DRAW,
     CARD_ACTIONS, CARD_BUYS, CARD_TYPE_ID, CARD_SPECIAL_ID,
@@ -19,20 +19,21 @@ from cards import (
 )
 
 if TYPE_CHECKING:
-    from strategy import Strategy
+    from core.strategy import Strategy
 
 # ── Build and load the shared library ──
 
 _dir = os.path.dirname(os.path.abspath(__file__))
-_so_path = os.path.join(_dir, "dominion.so")
-_c_path = os.path.join(_dir, "dominion.c")
+_root = os.path.dirname(_dir)
+_so_path = os.path.join(_root, "dominion.so")
+_c_path = os.path.join(_root, "c", "dominion.c")
 
 
 def _ensure_built():
     """Auto-build dominion.so if missing or stale."""
     if not os.path.exists(_so_path) or \
        os.path.getmtime(_c_path) > os.path.getmtime(_so_path):
-        subprocess.check_call(["make", "-C", _dir, "dominion.so"],
+        subprocess.check_call(["make", "-C", os.path.join(_root, "c")],
                               stdout=subprocess.DEVNULL)
 
 
@@ -162,7 +163,7 @@ def evaluate_vs_opponent_c(strategy: Strategy, seed_list: list[int],
     Same interface as fitness.evaluate_vs_opponent but ~50-100x faster.
     Does not return avg_final_deck (returns None for that field).
     """
-    from strategy import big_money_strategy
+    from core.strategy import big_money_strategy
     opp = opponent if opponent is not None else big_money_strategy()
 
     strat1 = strategy_to_ints(strategy)
