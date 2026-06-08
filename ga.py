@@ -283,8 +283,11 @@ def run_ga(config: dict) -> dict:
     overall_best_fitness = -1.0
     overall_best_strategy = None
     stagnation_count = 0       # generations since last improvement
-    STAGNATION_THRESHOLD = 30  # boost mutation after this many stale generations
-    STAGNATION_INJECT = 5      # number of random strategies to inject
+    STAGNATION_THRESHOLD = 30  # trigger boost after this many stale generations
+    STAGNATION_BOOST_DURATION = 10  # how many generations to keep boost active
+    STAGNATION_BOOST_MULT = 1.5  # mutation rate multiplier during boost
+    STAGNATION_INJECT = 10     # number of random strategies to inject at boost start
+    boost_remaining = 0        # countdown for active boost
 
     csv_path = config.get("csv_path", "evolution_log.csv")
     csv_append = config.get("csv_append", False)
@@ -376,6 +379,7 @@ def run_ga(config: dict) -> dict:
                 overall_best_fitness = best_fitness
                 overall_best_strategy = deepcopy(best_strat)
                 stagnation_count = 0
+                boost_remaining = 0
             else:
                 stagnation_count += 1
 
@@ -419,12 +423,19 @@ def run_ga(config: dict) -> dict:
                 break
 
             # --- Stagnation detection ---
-            stagnant = stagnation_count >= STAGNATION_THRESHOLD
-            effective_rate = min(mutation_rate * 2.5, 0.5) if stagnant else mutation_rate
-            if stagnant and stagnation_count % STAGNATION_THRESHOLD == 0:
+            if stagnation_count == STAGNATION_THRESHOLD:
+                # Just hit threshold — start a boost period
+                boost_remaining = STAGNATION_BOOST_DURATION
                 print(f"  >>> Stagnation detected ({stagnation_count} gens), "
-                      f"boosting mutation to {effective_rate:.0%} + "
+                      f"boosting mutation {STAGNATION_BOOST_MULT}x for "
+                      f"{STAGNATION_BOOST_DURATION} gens + "
                       f"injecting {STAGNATION_INJECT} randoms <<<")
+
+            if boost_remaining > 0:
+                effective_rate = min(mutation_rate * STAGNATION_BOOST_MULT, 0.35)
+                boost_remaining -= 1
+            else:
+                effective_rate = mutation_rate
 
             # --- Selection + reproduction ---
             # Elites from tier 2 ranking (most reliable fitness estimates)
@@ -434,8 +445,8 @@ def run_ga(config: dict) -> dict:
 
             new_pop = list(elites)
 
-            # Inject random strategies during stagnation
-            if stagnant and stagnation_count % STAGNATION_THRESHOLD == 0:
+            # Inject random strategies at the start of a boost period
+            if stagnation_count == STAGNATION_THRESHOLD:
                 for _ in range(STAGNATION_INJECT):
                     new_pop.append(random_strategy(ga_rng, kingdom))
 

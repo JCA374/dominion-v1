@@ -19,7 +19,7 @@ import random
 
 # === Config ===
 POP_SIZE        = 60 #60
-GENERATIONS     = 5000
+GENERATIONS     = 10000
 GAMES_PER_EVAL  = 80 #50
 TOURNAMENT_SIZE = 3
 ELITE_COUNT     = 2
@@ -34,7 +34,7 @@ KINGDOM         = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Cha
                    "Throne Room", "Mine", "Moneylender", "Merchant"]
 HALL_MAX_SIZE   = 6    # Maximum hall of fame opponents
 HALL_ADD_THRESHOLD = 0.55  # Add to hall when win rate exceeds this
-VP_MARGIN_WEIGHT = 0.4  # Blend VP margin into fitness (0=win rate only, 1=margin only)
+VP_MARGIN_WEIGHT = 0.5  # Blend VP margin into fitness (0=win rate only, 1=margin only)
 SPEED_WEIGHT    = 0.2  # Reward faster wins (25 turns=0, 15 turns=max)
 WORKERS         = 8    # Parallel workers for evaluation (1 = sequential)
 

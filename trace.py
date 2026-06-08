@@ -93,11 +93,23 @@ def _hand_str(hand: list[str]) -> str:
     return ", ".join(parts)
 
 
-def _deck_summary(state: GameState) -> str:
+def _deck_summary_by_type(state: GameState) -> tuple[str, str, str]:
+    """Return (vp_line, treasure_line, action_line) for the final deck."""
     all_cards = state.deck + state.hand + state.discard + state.play_area
     counts = Counter(all_cards)
-    parts = [f"{n}x{c}" for c, n in counts.most_common()]
-    return ", ".join(parts)
+    vp, treasure, action = [], [], []
+    for card_name, n in counts.most_common():
+        card = ALL_CARDS[card_name]
+        entry = f"{n}x{card_name}" if n > 1 else card_name
+        if card.card_type == CardType.VICTORY:
+            vp.append(entry)
+        elif card.card_type == CardType.TREASURE:
+            treasure.append(entry)
+        else:
+            action.append(entry)
+    return (", ".join(vp) or "—",
+            ", ".join(treasure) or "—",
+            ", ".join(action) or "—")
 
 
 # ---------------------------------------------------------------------------
@@ -410,27 +422,13 @@ def _game_result(p1, p2, turns, label1, label2):
     print(_left(f"  {label1}: {vp1} VP") + _right(f"  {label2}: {count_vp(p2)} VP").lstrip())
     print()
 
-    # Deck breakdowns side by side
-    d1 = _deck_summary(p1)
-    d2 = _deck_summary(p2)
-    # Split long deck summaries across lines
-    for deck, side in [(d1, "left"), (d2, "right")]:
-        words = deck.split(", ")
-        line = ""
-        for w in words:
-            if line and len(line) + len(w) + 2 > COL - 4:
-                if side == "left":
-                    print(_left("  " + line))
-                else:
-                    print(_right("  " + line))
-                line = w
-            else:
-                line = line + ", " + w if line else w
-        if line:
-            if side == "left":
-                print(_left("  " + line))
-            else:
-                print(_right("  " + line))
+    # Deck breakdowns side by side: VP, Treasure, Action rows
+    d1 = _deck_summary_by_type(p1)
+    d2 = _deck_summary_by_type(p2)
+    for label, row1, row2 in [("VP", d1[0], d2[0]),
+                               ("$", d1[1], d2[1]),
+                               ("A", d1[2], d2[2])]:
+        print(_left(f"  {label}: {row1}") + _right(f"  {label}: {row2}").lstrip())
 
     print()
     if vp1 > vp2:
