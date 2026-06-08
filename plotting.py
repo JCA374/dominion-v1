@@ -71,7 +71,7 @@ def plot_transitions(log: list[dict], filename: str = "transitions.png") -> None
 
 
 def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> None:
-    """Heatmap showing priority rank of each card per phase + buy targets."""
+    """Heatmap showing priority rank of each card per phase."""
     lists = [
         strategy.early_buy_priority,
         strategy.mid_buy_priority,
@@ -92,67 +92,43 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
     non_pass.sort(key=lambda c: ALL_CARDS[c].cost, reverse=True)
     cards = non_pass + (["PASS"] if "PASS" in seen else [])
 
-    # Build rank data (3 phase columns)
     data = np.full((len(cards), 3), np.nan)
+
     for col, priority_list in enumerate(lists):
         for rank, card_name in enumerate(priority_list):
             if card_name in seen:
                 row = cards.index(card_name)
                 data[row, col] = rank + 1  # 1-indexed rank
 
-    # Build target data (3 phase columns) — grey out cards ranked after PASS
     buy_targets = strategy.buy_targets
-    has_targets = bool(buy_targets)
-    n_cols = 6 if has_targets else 3
 
-    if has_targets:
-        target_data = np.full((len(cards), 3), np.nan)
-        for col, priority_list in enumerate(lists):
-            # Find PASS position in this phase
-            pass_pos = len(priority_list)
-            for idx, c in enumerate(priority_list):
-                if c == "PASS":
-                    pass_pos = idx
-                    break
-            for card_name in cards:
-                if card_name == "PASS":
-                    continue
-                row = cards.index(card_name)
-                if card_name in buy_targets:
-                    # Find this card's rank in this phase
-                    card_rank = None
-                    for idx, c in enumerate(priority_list):
-                        if c == card_name:
-                            card_rank = idx
-                            break
-                    # -1 means after PASS (greyed out)
-                    if card_rank is not None and card_rank < pass_pos:
-                        target_data[row, col] = buy_targets[card_name]
-                    else:
-                        target_data[row, col] = -1  # after PASS sentinel
-
-    # Layout: rank heatmap on left, target columns on right
-    if has_targets:
-        fig, (ax, ax_t) = plt.subplots(1, 2, figsize=(10, max(4, len(cards) * 0.4)),
-                                        gridspec_kw={"width_ratios": [3, 3], "wspace": 0.15},
-                                        layout="constrained")
-    else:
-        fig, ax = plt.subplots(figsize=(6, max(4, len(cards) * 0.4)), layout="constrained")
-
+    fig, ax = plt.subplots(figsize=(6, max(4, len(cards) * 0.4)), layout="constrained")
     cmap = plt.cm.RdYlGn_r  # lower rank (higher priority) = green
     n_items = max(len(lst) for lst in lists)
     im = ax.imshow(data, cmap=cmap, aspect="auto", vmin=1, vmax=n_items)
 
-    t = strategy.transitions
     ax.set_xticks(range(3))
+    t = strategy.transitions
     ax.set_xticklabels([
         f"Early\n(turns 1–{t.early_to_mid_turn - 1})",
         f"Mid\n(turn {t.early_to_mid_turn}+,\n>{t.mid_to_late_provinces} prov left)",
         f"Late\n(≤{t.mid_to_late_provinces} prov left)",
     ])
+
+    # Left y-axis: card name (cost)
     ax.set_yticks(range(len(cards)))
     ax.set_yticklabels([f"{c} ({ALL_CARDS[c].cost})" if c != "PASS" else "PASS"
                         for c in cards])
+
+    # Right y-axis: buy targets
+    if buy_targets:
+        ax2 = ax.secondary_yaxis("right")
+        ax2.set_yticks(range(len(cards)))
+        ax2.set_yticklabels([
+            f"max {buy_targets[c]}" if c in buy_targets else ""
+            for c in cards
+        ])
+        ax2.set_ylabel("Buy Targets")
 
     # Highlight PASS row with a different background
     if "PASS" in cards:
@@ -167,46 +143,7 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
                         fontsize=9, fontweight="bold",
                         color="white" if data[i, j] > n_items / 2 else "black")
 
-    ax.set_title("Buy Priority Rank (1 = highest)")
-
-    # Target columns on the right
-    if has_targets:
-        # Build display matrix: white background, colored cells for targets
-        display = np.full((len(cards), 3), np.nan)
-        for i in range(len(cards)):
-            for j in range(3):
-                if not np.isnan(target_data[i, j]) and target_data[i, j] >= 0:
-                    display[i, j] = target_data[i, j]
-
-        max_target = max(buy_targets.values()) if buy_targets else 5
-        cmap_t = plt.cm.Blues
-        ax_t.imshow(display, cmap=cmap_t, aspect="auto", vmin=0, vmax=max_target + 1)
-
-        ax_t.set_xticks(range(3))
-        ax_t.set_xticklabels(["Early", "Mid", "Late"])
-        ax_t.set_yticks(range(len(cards)))
-        ax_t.set_yticklabels([])  # no duplicate y labels
-
-        if "PASS" in cards:
-            ax_t.axhline(y=cards.index("PASS") - 0.5, color="gray", linewidth=0.5, linestyle="--")
-
-        # Annotate target cells
-        for i in range(len(cards)):
-            for j in range(3):
-                val = target_data[i, j]
-                if np.isnan(val):
-                    continue
-                if val == -1:
-                    # After PASS — grey text
-                    if cards[i] in buy_targets:
-                        ax_t.text(j, i, f"({buy_targets[cards[i]]})", ha="center", va="center",
-                                  fontsize=8, color="#aaaaaa", fontstyle="italic")
-                elif val >= 0:
-                    ax_t.text(j, i, f"{int(val)}", ha="center", va="center",
-                              fontsize=9, fontweight="bold")
-
-        ax_t.set_title("Buy Targets (max copies)")
-
+    ax.set_title("Buy Priority Rank by Phase (1 = highest)")
     fig.colorbar(im, ax=ax, label="Rank", shrink=0.6)
     fig.savefig(filename, dpi=150)
     plt.close(fig)
