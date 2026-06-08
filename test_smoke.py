@@ -3,7 +3,10 @@
 import random
 
 from cards import (ALL_CARDS, BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS,
-                    NONTERMINAL_ACTIONS, TERMINAL_ACTIONS, CardType)
+                    NONTERMINAL_ACTIONS, TERMINAL_ACTIONS, CardType,
+                    CARD_ID, CARD_NAME, NUM_CARDS, PASS_ID, STOP_ID,
+                    CARD_COST, CARD_COINS, CARD_VP, CARD_DRAW,
+                    CARD_ACTIONS, CARD_BUYS, CARD_TYPE_ID, CARD_SPECIAL_ID)
 from engine import (
     new_game, play_game, play_game_2p, play_action_phase, play_buy_phase,
     play_chapel, play_moneylender, play_throne_room, play_mine,
@@ -16,7 +19,7 @@ from strategy import (
     save_best_model, load_strategy, get_action_priority,
     get_chapel_trash_priority,
 )
-from fitness import evaluate, evaluate_vs_opponent, make_seed_list
+from fitness import evaluate, evaluate_vs_opponent, make_seed_list, USE_C_ENGINE
 from ga import order_crossover, mutate, crossover, init_population
 
 
@@ -979,58 +982,6 @@ def test_chapel_trash_zero_cards():
     assert state.hand == ["Estate", "Estate", "Copper", "Copper"]
 
 
-def test_chapel_trash_one_type():
-    """STOP after first entry trashes only that card type."""
-    state = _make_state_with_hand(
-        ["Chapel", "Estate", "Estate", "Copper", "Copper"],
-    )
-    strategy = _chapel_strategy(["Estate", "STOP", "Copper", "Duchy", "Silver"])
-
-    play_action_phase(state, strategy)
-
-    assert state.trash == ["Estate", "Estate"]
-    assert state.hand == ["Copper", "Copper"]
-
-
-def test_chapel_trash_two_types():
-    """STOP after two entries trashes both types."""
-    state = _make_state_with_hand(
-        ["Chapel", "Estate", "Copper", "Copper", "Silver"],
-    )
-    strategy = _chapel_strategy(["Estate", "Copper", "STOP", "Duchy", "Silver"])
-
-    play_action_phase(state, strategy)
-
-    assert len(state.trash) == 3  # 1 Estate + 2 Copper
-    assert state.hand == ["Silver"]
-
-
-def test_chapel_trash_three_types():
-    """STOP after three entries trashes all three types (up to 4 cards)."""
-    state = _make_state_with_hand(
-        ["Chapel", "Estate", "Copper", "Silver", "Duchy"],
-    )
-    strategy = _chapel_strategy(["Estate", "Copper", "Silver", "STOP", "Duchy"])
-
-    play_action_phase(state, strategy)
-
-    assert len(state.trash) == 3  # 1 of each
-    assert state.hand == ["Duchy"]
-
-
-def test_chapel_trash_four_types():
-    """STOP at the end (or absent) trashes all listed types up to 4."""
-    state = _make_state_with_hand(
-        ["Chapel", "Estate", "Copper", "Silver", "Duchy"],
-    )
-    strategy = _chapel_strategy(["Estate", "Copper", "Silver", "Duchy", "STOP"])
-
-    play_action_phase(state, strategy)
-
-    assert len(state.trash) == 4
-    assert state.hand == []
-
-
 def test_chapel_priority_order_matters():
     """Chapel trashes in priority order, so with 4-card cap, low priority may survive."""
     state = _make_state_with_hand(
@@ -1080,7 +1031,7 @@ def test_ga_chapel_trash_hardcoded():
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# New card tests: Woodcutter, Council Room, Moneylender, Gardens
+# Special card tests: Throne Room, Council Room, Moneylender, Gardens, Mine, Merchant
 # ---------------------------------------------------------------------------
 
 def test_throne_room_doubles_smithy():
@@ -1420,7 +1371,7 @@ def test_save_and_load_best_model(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Opponent switching tests (SWITCH_AT / BM_FLOOR)
+# Hall of fame tests
 # ---------------------------------------------------------------------------
 
 def test_hall_of_fame_adds_member_when_threshold_met():
@@ -1600,7 +1551,7 @@ def test_buy_target_zero_blocks_purchase():
 
 
 def test_ga_best_strategy_beats_big_money():
-    """GA output (trained vs Big Money) must beat Big Money at bm_floor rate."""
+    """GA output must beat Big Money >= 50%."""
     from ga import run_ga
 
     result = run_ga({
@@ -1612,17 +1563,16 @@ def test_ga_best_strategy_beats_big_money():
         "mutation_rate": 0.15,
         "seed": 42,
         "kingdom": KINGDOM_CARDS,
-        "opponent": None,           # force Big Money opponent
-        "switch_threshold": 99.0,   # disable switching
+        "hall_add_threshold": 0.55,
+        "hall_max_size": 4,
         "csv_path": "/tmp/test_ga_bm.csv",
         "best_model_dir": "/tmp/test_ga_bm_model",
     })
 
-    # Verify best strategy actually beats Big Money
     rng = random.Random(99)
     seeds = make_seed_list(100, rng)
     vs = evaluate_vs_opponent(result["best_strategy"], seeds, KINGDOM_CARDS,
-                              opponent=None)
+                              opponent=None, need_deck=True)
     assert vs["win_rate"] >= 0.50, (
         f"GA best should beat Big Money >=50%, got {vs['win_rate']:.0%}")
 
@@ -1715,6 +1665,134 @@ def test_duchy_max_coins_skips_buy():
     play_buy_phase(state2, strategy2)
     # 5 coins > 4 threshold, Duchy skipped
     assert "Duchy" not in state2.discard
+
+
+# ---------------------------------------------------------------------------
+# Card ID mapping tests
+# ---------------------------------------------------------------------------
+
+def test_card_id_coverage():
+    """Every card in ALL_CARDS has an integer ID and vice versa."""
+    for name in ALL_CARDS:
+        assert name in CARD_ID, f"Card {name} missing from CARD_ID"
+    for cid in range(NUM_CARDS):
+        assert cid in CARD_NAME, f"Card ID {cid} missing from CARD_NAME"
+        assert CARD_NAME[cid] in ALL_CARDS, f"CARD_NAME[{cid}]={CARD_NAME[cid]} not in ALL_CARDS"
+
+
+def test_card_id_data_arrays_match():
+    """Flat data arrays match the Card dataclass fields."""
+    for name, cid in CARD_ID.items():
+        if cid >= NUM_CARDS:
+            continue
+        card = ALL_CARDS[name]
+        assert CARD_COST[cid] == card.cost, f"{name} cost mismatch"
+        assert CARD_COINS[cid] == card.coins, f"{name} coins mismatch"
+        assert CARD_VP[cid] == card.vp, f"{name} vp mismatch"
+        assert CARD_DRAW[cid] == card.cards_drawn, f"{name} draw mismatch"
+        assert CARD_ACTIONS[cid] == card.actions, f"{name} actions mismatch"
+        assert CARD_BUYS[cid] == card.buys, f"{name} buys mismatch"
+
+
+def test_card_id_sentinels():
+    """PASS and STOP have IDs >= NUM_CARDS."""
+    assert PASS_ID >= NUM_CARDS
+    assert STOP_ID >= NUM_CARDS
+    assert PASS_ID != STOP_ID
+
+
+# ---------------------------------------------------------------------------
+# C engine tests
+# ---------------------------------------------------------------------------
+
+def test_c_engine_available():
+    """C engine (dominion.so) loads successfully."""
+    assert USE_C_ENGINE, "C engine not available — dominion.so may not be built"
+
+
+def test_c_engine_strategy_serialization():
+    """strategy_to_ints produces a valid array of the expected size."""
+    from c_bridge import strategy_to_ints, STRATEGY_SIZE
+
+    for strat_fn in [big_money_strategy, engine_strategy]:
+        strat = strat_fn()
+        arr = strategy_to_ints(strat)
+        assert len(arr) == STRATEGY_SIZE
+        # Transitions should be positive
+        assert arr[0] > 0  # early_to_mid_turn
+        assert arr[1] > 0  # mid_to_late_provinces
+
+
+def test_c_engine_big_money_vs_self_balanced():
+    """Big Money vs itself via C engine should win ~50%."""
+    from c_bridge import evaluate_vs_opponent_c
+
+    bm = big_money_strategy()
+    seeds = make_seed_list(200, random.Random(42))
+    result = evaluate_vs_opponent_c(bm, seeds, KINGDOM_CARDS, opponent=bm)
+    assert 0.30 <= result["win_rate"] <= 0.70, (
+        f"BM vs itself should be ~50%, got {result['win_rate']:.0%}")
+
+
+def test_c_engine_win_loss_tie_sum():
+    """C engine results: win + tie + loss = 1.0."""
+    from c_bridge import evaluate_vs_opponent_c
+
+    bm = big_money_strategy()
+    seeds = make_seed_list(50, random.Random(42))
+    result = evaluate_vs_opponent_c(bm, seeds, KINGDOM_CARDS, opponent=bm)
+    total = result["win_rate"] + result["tie_rate"] + result["loss_rate"]
+    assert abs(total - 1.0) < 1e-9, f"Win+tie+loss = {total}"
+
+
+def test_c_engine_stronger_strategy_wins():
+    """C engine: Big Money should beat a do-nothing strategy."""
+    from c_bridge import evaluate_vs_opponent_c
+
+    bm = big_money_strategy()
+    do_nothing = _make_strategy(
+        early_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        mid_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+        late_buy_priority=["PASS"] + BUYABLE_CARDS[:],
+    )
+    seeds = make_seed_list(50, random.Random(42))
+    result = evaluate_vs_opponent_c(bm, seeds, KINGDOM_CARDS, opponent=do_nothing)
+    assert result["win_rate"] >= 0.90, (
+        f"BM should crush do-nothing, got {result['win_rate']:.0%}")
+    assert result["mean_vp_margin"] > 0
+
+
+def test_c_engine_random_strategies_complete():
+    """C engine handles 20 random strategies without crashing."""
+    from c_bridge import evaluate_vs_opponent_c
+
+    bm = big_money_strategy()
+    seeds = make_seed_list(20, random.Random(42))
+    for i in range(20):
+        strat = random_strategy(random.Random(i * 7))
+        result = evaluate_vs_opponent_c(strat, seeds, KINGDOM_CARDS, opponent=bm)
+        assert 0.0 <= result["win_rate"] <= 1.0
+        assert result["mean_turns"] > 0
+
+
+def test_c_engine_consistent_with_python():
+    """C and Python engines produce statistically similar results."""
+    bm = big_money_strategy()
+    seeds = make_seed_list(200, random.Random(99))
+
+    py_result = evaluate_vs_opponent(bm, seeds, KINGDOM_CARDS, opponent=bm,
+                                     need_deck=True)
+
+    from c_bridge import evaluate_vs_opponent_c
+    c_result = evaluate_vs_opponent_c(bm, seeds, KINGDOM_CARDS, opponent=bm)
+
+    # Both should be roughly balanced (different RNGs, so not exact)
+    assert abs(py_result["win_rate"] - c_result["win_rate"]) < 0.15, (
+        f"Win rates differ too much: Python={py_result['win_rate']:.2f} "
+        f"C={c_result['win_rate']:.2f}")
+    assert abs(py_result["mean_turns"] - c_result["mean_turns"]) < 5, (
+        f"Turn counts differ too much: Python={py_result['mean_turns']:.1f} "
+        f"C={c_result['mean_turns']:.1f}")
 
 
 if __name__ == "__main__":

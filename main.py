@@ -127,7 +127,8 @@ def main():
     hall = result["hall"]
     rng = random.Random(SEED + 1000)
     eval_seeds = make_seed_list(200, rng)
-    vs = evaluate_vs_hall(result["best_strategy"], eval_seeds, hall, KINGDOM)
+    vs = evaluate_vs_hall(result["best_strategy"], eval_seeds, hall, KINGDOM,
+                          need_deck=True)
     vs["num_games"] = 200
     vs["opponent"] = f"hall({len(hall)})"
 

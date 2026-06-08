@@ -275,9 +275,53 @@ def play_buy_phase(state, strategy):
 
 ---
 
-## 7. Parallelization
+## 7. C Engine
 
-Fitness evaluation is the primary computational bottleneck. The system uses Python's `ProcessPoolExecutor` with configurable workers (default 8):
+### 7.1 Motivation
+
+Fitness evaluation is the primary computational bottleneck: 60 strategies × 160 games × ~6 hall opponents = ~57,600 games per generation. The pure Python engine (`engine.py`) uses string card names for all lookups, dictionary-based supply tracking, and list operations — all of which carry significant interpreter overhead.
+
+### 7.2 Architecture
+
+The C engine (`dominion.c`) is a complete reimplementation of the game loop optimized for batch evaluation:
+
+- **Integer card IDs** instead of string names — all comparisons are integer equality
+- **Fixed-size arrays** with counts (`deck[80]` + `deck_n`) instead of Python lists — no allocation
+- **Flat strategy representation** — priority lists serialized as -1 terminated int arrays, eliminating dict/object overhead
+- **xorshift64 PRNG** — faster than Python's Mersenne Twister, seeded from Python
+- **Batch API** — `play_games_batch()` runs all seeds for a matchup in a single ctypes call, eliminating per-game FFI overhead
+
+The C engine handles only the strategy-driven game loop (action phase, buy phase, cleanup). Interactive play modes (`play.py`, `gui.py`, `trace.py`) continue to use the Python engine, which provides the low-level primitives they need for user-driven decisions.
+
+### 7.3 Integration
+
+```
+cards.py (CARD_ID, data arrays)  →  c_bridge.py (ctypes)  →  dominion.so
+                                          ↑
+fitness.py: if USE_C_ENGINE → evaluate_vs_opponent_c()
+            else            → evaluate_vs_opponent() [Python fallback]
+```
+
+- `cards.py` defines integer card IDs and flat data arrays (cost, coins, VP, etc.)
+- `c_bridge.py` loads `dominion.so` via ctypes, serializes `Strategy` objects to flat int arrays, and provides `evaluate_vs_opponent_c()` as a drop-in replacement
+- `fitness.py` auto-detects the C engine and uses it for all GA evaluation; falls back to Python if `dominion.so` is unavailable
+- The final evaluation in `main.py` uses the Python engine (`need_deck=True`) to capture deck composition data for the summary
+
+### 7.4 Performance
+
+Benchmark: 5 strategies × 500 seeds × 2 seats = 5,000 games
+
+| Engine | Time | Per game |
+|--------|------|----------|
+| Python (single-threaded) | ~4.5s | ~0.9ms |
+| C (single-threaded) | ~0.09s | ~18us |
+| **Speedup** | **~50x** | |
+
+The C engine is fast enough that Python multiprocessing is no longer needed for evaluation. A single-threaded C evaluation completes faster than 8-worker Python evaluation, while avoiding process spawn overhead and strategy serialization costs.
+
+### 7.5 Parallelization (Python Fallback)
+
+When the C engine is unavailable, the system falls back to Python's `ProcessPoolExecutor` with configurable workers (default 8):
 
 ```python
 def evaluate_population_vs_hall(population, seed_list, kingdom, hall, workers):
@@ -287,7 +331,7 @@ def evaluate_population_vs_hall(population, seed_list, kingdom, hall, workers):
         return list(pool.map(fn, population))
 ```
 
-Each worker independently evaluates one strategy against the entire hall. With 60 strategies × 160 games each = 9,600 games per generation, parallelization across 8 cores reduces wall-clock time roughly 6-7x (accounting for serialization overhead).
+Each worker independently evaluates one strategy against the entire hall.
 
 ---
 
@@ -468,9 +512,10 @@ The `summarize()` function generates a plain-English description of the evolved 
 
 ## 12. Future Directions
 
-1. **Attack cards** (Witch, Militia) — force interactive play and reward faster cycling
-2. **Conditional buy genes** — "buy Duchy when <= N Provinces remain"
-3. **Opponent-aware fitness** — reward strategies that adapt to opponent type
-4. **Larger card pools** — evolve kingdom selection alongside strategy
-5. **Neural network policy** — replace priority lists with a learned value function over game state
-6. **Coevolution** — evolve two populations against each other instead of a fixed hall
+1. **Attack cards** (Witch, Militia) — force interactive play and reward faster cycling; requires curse supply, discard decisions, and 3-player game loop
+2. **3+ player games** — expand the engine to support multiplayer with shared supply
+3. **Conditional buy genes** — "buy Duchy when <= N Provinces remain"
+4. **Opponent-aware fitness** — reward strategies that adapt to opponent type
+5. **Larger card pools** — evolve kingdom selection alongside strategy
+6. **Neural network policy** — replace priority lists with a learned value function over game state
+7. **Coevolution** — evolve two populations against each other instead of a fixed hall

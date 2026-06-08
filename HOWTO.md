@@ -21,10 +21,22 @@ as it was trained.
 
 ## 1. Training — the GA (`main.py`)
 
-Train a strategy using the genetic algorithm:
+### Build the C engine first (one-time)
+
+The GA uses a fast C game engine for evaluation (~50x faster than Python).
+Build it before training:
 
 ```bash
-python main.py              # fresh training run (1000 generations)
+make                        # builds dominion.so
+```
+
+If `dominion.so` is missing, the system auto-builds it on first run (requires `gcc`).
+Falls back to the Python engine if compilation fails.
+
+### Run training
+
+```bash
+python main.py              # fresh training run (10000 generations)
 python main.py --continue   # continue from best_model/, keeps generation numbering
 ```
 
@@ -111,12 +123,15 @@ Militia and Moat are excluded — no attack/reaction cards in this simplified en
 
 | File | Purpose |
 |------|---------|
-| `engine.py` | Game rules — shared by GA and all play modes |
-| `cards.py` | Card definitions (18 cards) |
+| `engine.py` | Python game engine — used by interactive play modes |
+| `dominion.c` | C game engine — fast evaluation for GA training (~50x faster) |
+| `c_bridge.py` | Python-C bridge (ctypes), strategy serialization |
+| `Makefile` | Builds `dominion.so` from `dominion.c` |
+| `cards.py` | Card definitions (18 cards) + integer ID mappings |
 | `strategy.py` | Strategy genome, phase logic, I/O |
 | `main.py` | GA entry point + config |
 | `ga.py` | GA: selection, crossover, mutation |
-| `fitness.py` | Game simulation and win-rate evaluation |
+| `fitness.py` | Game simulation and win-rate evaluation (auto-uses C engine) |
 | `play.py` | Terminal interactive play |
 | `gui.py` | Graphical interactive play (pygame) |
 | `trace.py` | AI vs AI game trace viewer |

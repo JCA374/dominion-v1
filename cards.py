@@ -67,3 +67,61 @@ NONTERMINAL_ACTIONS = [c for c in ACTION_CARDS if ALL_CARDS[c].actions > 0]
 TERMINAL_ACTIONS = [c for c in ACTION_CARDS if ALL_CARDS[c].actions == 0]
 
 BUYABLE_CARDS = TREASURE_CARDS + VICTORY_CARDS + KINGDOM_CARDS
+
+# --- Integer Card IDs (for C engine) ---
+
+CARD_ID = {
+    "Copper": 0, "Silver": 1, "Gold": 2,
+    "Estate": 3, "Duchy": 4, "Province": 5,
+    "Village": 6, "Smithy": 7, "Market": 8, "Laboratory": 9,
+    "Festival": 10, "Chapel": 11, "Throne Room": 12,
+    "Council Room": 13, "Moneylender": 14, "Gardens": 15,
+    "Mine": 16, "Merchant": 17,
+}
+NUM_CARDS = 18
+PASS_ID = 18
+STOP_ID = 19
+CARD_NAME = {v: k for k, v in CARD_ID.items()}
+CARD_NAME[PASS_ID] = "PASS"
+CARD_NAME[STOP_ID] = "STOP"
+
+# Special card codes
+SPECIAL_NONE = 0
+SPECIAL_CHAPEL = 1
+SPECIAL_THRONE_ROOM = 2
+SPECIAL_MONEYLENDER = 3
+SPECIAL_GARDENS = 4
+SPECIAL_MINE = 5
+SPECIAL_MERCHANT = 6
+
+_SPECIAL_MAP = {
+    None: SPECIAL_NONE,
+    "chapel": SPECIAL_CHAPEL,
+    "throne_room": SPECIAL_THRONE_ROOM,
+    "moneylender": SPECIAL_MONEYLENDER,
+    "gardens": SPECIAL_GARDENS,
+    "mine": SPECIAL_MINE,
+    "merchant": SPECIAL_MERCHANT,
+}
+
+# Card type codes
+TYPE_TREASURE = 1
+TYPE_VICTORY = 2
+TYPE_ACTION = 3
+
+_TYPE_MAP = {
+    CardType.TREASURE: TYPE_TREASURE,
+    CardType.VICTORY: TYPE_VICTORY,
+    CardType.ACTION: TYPE_ACTION,
+}
+
+# Flat data arrays indexed by card ID (for C engine)
+_ordered = [ALL_CARDS[CARD_NAME[i]] for i in range(NUM_CARDS)]
+CARD_COST = [c.cost for c in _ordered]
+CARD_COINS = [c.coins for c in _ordered]
+CARD_VP = [c.vp for c in _ordered]
+CARD_DRAW = [c.cards_drawn for c in _ordered]
+CARD_ACTIONS = [c.actions for c in _ordered]
+CARD_BUYS = [c.buys for c in _ordered]
+CARD_TYPE_ID = [_TYPE_MAP[c.card_type] for c in _ordered]
+CARD_SPECIAL_ID = [_SPECIAL_MAP[c.special] for c in _ordered]

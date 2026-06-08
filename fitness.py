@@ -12,6 +12,12 @@ from typing import TYPE_CHECKING
 from engine import play_game, play_game_2p
 from strategy import big_money_strategy
 
+try:
+    from c_bridge import evaluate_vs_opponent_c
+    USE_C_ENGINE = True
+except (ImportError, OSError) as e:
+    USE_C_ENGINE = False
+
 if TYPE_CHECKING:
     from strategy import Strategy
 
@@ -39,13 +45,19 @@ def evaluate(strategy: Strategy, seed_list: list[int],
 
 def evaluate_vs_opponent(strategy: Strategy, seed_list: list[int],
                          kingdom: list[str] | None = None,
-                         opponent: Strategy | None = None) -> dict:
+                         opponent: Strategy | None = None,
+                         need_deck: bool = False) -> dict:
     """Play 2-player games against an opponent. Return win rate.
 
     If opponent is None, defaults to Big Money.
     Each seed is played twice (strategy as P1 and as P2) to cancel
     first-player advantage.
+
+    Uses the C engine when available (much faster) unless need_deck=True.
     """
+    if USE_C_ENGINE and not need_deck:
+        return evaluate_vs_opponent_c(strategy, seed_list, kingdom, opponent)
+
     opp = opponent if opponent is not None else big_money_strategy()
     wins = 0
     ties = 0
@@ -114,13 +126,15 @@ def evaluate_population(population: list[Strategy], seed_list: list[int],
 
 def evaluate_vs_hall(strategy: Strategy, seed_list: list[int],
                      hall: list[Strategy],
-                     kingdom: list[str] | None = None) -> dict:
+                     kingdom: list[str] | None = None,
+                     need_deck: bool = False) -> dict:
     """Evaluate strategy against each hall member, return averaged stats.
 
     Divides seeds across hall members so total game count stays manageable.
     """
     if not hall:
-        return evaluate_vs_opponent(strategy, seed_list, kingdom, opponent=None)
+        return evaluate_vs_opponent(strategy, seed_list, kingdom, opponent=None,
+                                    need_deck=need_deck)
 
     # Divide seeds among hall members (min 4 per opponent)
     seeds_per_opp = max(4, len(seed_list) // len(hall))
@@ -132,7 +146,8 @@ def evaluate_vs_hall(strategy: Strategy, seed_list: list[int],
         opp_seeds = seed_list[start:start + seeds_per_opp]
         if len(opp_seeds) < seeds_per_opp:
             opp_seeds += seed_list[:seeds_per_opp - len(opp_seeds)]
-        result = evaluate_vs_opponent(strategy, opp_seeds, kingdom, opponent=opponent)
+        result = evaluate_vs_opponent(strategy, opp_seeds, kingdom, opponent=opponent,
+                                      need_deck=need_deck)
         all_results.append(result)
 
     # Average across all opponents
