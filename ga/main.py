@@ -25,13 +25,13 @@ TOURNAMENT_SIZE = 3
 ELITE_COUNT     = 2
 MUTATION_RATE   = 0.18
 SEED            = 137
-# All available kingdom cards (12 total — a standard game uses 10)
-ALL_KINGDOM     = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
-                   "Throne Room", "Council Room", "Moneylender", "Gardens",
-                   "Mine", "Merchant"]
-# Select 10 for training — change this list to train on different kingdoms
-KINGDOM         = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
+# Named kingdom presets
+KINGDOM1        = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
                    "Throne Room", "Mine", "Moneylender", "Merchant"]
+KINGDOM2        = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
+                   "Throne Room", "Mine", "Militia", "Moat", "Witch"]
+# Active kingdom for training
+KINGDOM         = KINGDOM2
 HALL_MAX_SIZE   = 6    # Maximum hall of fame opponents
 HALL_ADD_THRESHOLD = 0.55  # Add to hall when win rate exceeds this
 VP_MARGIN_WEIGHT = 0.5  # Blend VP margin into fitness (0=win rate only, 1=margin only)
