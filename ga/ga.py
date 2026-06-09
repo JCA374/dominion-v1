@@ -159,6 +159,10 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
                 p1.transitions.mid_to_late_provinces,
                 p2.transitions.mid_to_late_provinces,
             ]),
+            mid_to_late_turn=rng.choice([
+                p1.transitions.mid_to_late_turn,
+                p2.transitions.mid_to_late_turn,
+            ]),
             late_to_end_provinces=rng.choice([
                 p1.transitions.late_to_end_provinces,
                 p2.transitions.late_to_end_provinces,
@@ -243,6 +247,11 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
         delta = rng.choice([-3, -2, -1, -1, 0, 1, 1, 2, 3])
         s.transitions.mid_to_late_provinces += delta
         s.transitions.mid_to_late_provinces = max(2, min(8, s.transitions.mid_to_late_provinces))
+
+    if rng.random() < rate:
+        delta = rng.choice([-3, -2, -1, -1, 0, 1, 1, 2, 3])
+        s.transitions.mid_to_late_turn += delta
+        s.transitions.mid_to_late_turn = max(5, min(30, s.transitions.mid_to_late_turn))
 
     if rng.random() < rate:
         delta = rng.choice([-1, 0, 1])
@@ -439,7 +448,8 @@ def run_ga(config: dict) -> dict:
                     f"  worst={worst_fitness:5.0%} | turns={best_turns:4.1f}"
                     f" | hall={len(hall)}"
                     f" | early→mid t{best_strat.transitions.early_to_mid_turn}"
-                    f"  mid→late p{best_strat.transitions.mid_to_late_provinces}")
+                    f"  mid→late p{best_strat.transitions.mid_to_late_provinces}"
+                    f"/t{best_strat.transitions.mid_to_late_turn}")
             if new_best:
                 line += "  *** new best ***"
             print(line)

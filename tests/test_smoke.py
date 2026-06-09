@@ -89,18 +89,23 @@ def test_single_game_big_money():
 
 def test_phase_selection():
     """Phase selection returns correct phase for edge cases."""
-    t = Transitions(early_to_mid_turn=6, mid_to_late_provinces=4, late_to_end_provinces=2)
+    t = Transitions(early_to_mid_turn=6, mid_to_late_provinces=4,
+                    mid_to_late_turn=15, late_to_end_provinces=2)
 
     assert get_current_phase(1, 12, t) == "early"
     assert get_current_phase(6, 12, t) == "early"
     assert get_current_phase(7, 12, t) == "mid"
     assert get_current_phase(7, 5, t) == "mid"
-    assert get_current_phase(7, 4, t) == "late"
+    assert get_current_phase(7, 4, t) == "late"    # provinces trigger
     assert get_current_phase(7, 3, t) == "late"
     assert get_current_phase(7, 2, t) == "end"
     assert get_current_phase(7, 0, t) == "end"
     assert get_current_phase(20, 4, t) == "late"
     assert get_current_phase(20, 1, t) == "end"
+    # Turn-based mid→late trigger (provinces still high but turn >= mid_to_late_turn)
+    assert get_current_phase(14, 8, t) == "mid"    # turn 14 < 15, provinces high
+    assert get_current_phase(15, 8, t) == "late"   # turn 15 >= 15, forces late
+    assert get_current_phase(20, 8, t) == "late"   # turn 20 >= 15, provinces high
 
 
 def test_nonterminals_play_before_terminals():

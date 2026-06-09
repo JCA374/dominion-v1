@@ -69,31 +69,32 @@ static int card_special[NUM_CARDS];
 /* Strategy is a flat int array. Priority lists are -1 terminated. */
 #define S_EARLY_TO_MID_TURN     0
 #define S_MID_TO_LATE_PROV      1
-#define S_LATE_TO_END_PROV      2
-#define S_CHAPEL_MAX_TRASH      3
-#define S_PROVINCE_MAX_COINS    4
-#define S_DUCHY_MAX_COINS       5
-#define S_MILITIA_COIN_THRESH   6
-#define S_EARLY_BUY             7    /* 20 slots */
-#define S_MID_BUY              27    /* 20 slots */
-#define S_LATE_BUY             47    /* 20 slots */
-#define S_END_BUY              67    /* 20 slots */
-#define S_EARLY_NT             87    /* 12 slots */
-#define S_EARLY_T              99    /* 12 slots */
-#define S_MID_NT              111    /* 12 slots */
-#define S_MID_T               123    /* 12 slots */
-#define S_LATE_NT             135    /* 12 slots */
-#define S_LATE_T              147    /* 12 slots */
-#define S_END_NT              159    /* 12 slots */
-#define S_END_T               171    /* 12 slots */
-#define S_EARLY_CHAPEL        183    /* 6 slots */
-#define S_MID_CHAPEL          189    /* 6 slots */
-#define S_LATE_CHAPEL         195    /* 6 slots */
-#define S_END_CHAPEL          201    /* 6 slots */
-#define S_THRONE_ROOM_PRIO    207    /* 12 slots */
-#define S_MINE_TRASH_PRIO     219    /* 4 slots */
-#define S_BUY_TARGETS         223    /* 20 slots: (card_id, max) pairs, -1 terminated */
-#define STRATEGY_SIZE         243
+#define S_MID_TO_LATE_TURN      2
+#define S_LATE_TO_END_PROV      3
+#define S_CHAPEL_MAX_TRASH      4
+#define S_PROVINCE_MAX_COINS    5
+#define S_DUCHY_MAX_COINS       6
+#define S_MILITIA_COIN_THRESH   7
+#define S_EARLY_BUY             8    /* 20 slots */
+#define S_MID_BUY              28    /* 20 slots */
+#define S_LATE_BUY             48    /* 20 slots */
+#define S_END_BUY              68    /* 20 slots */
+#define S_EARLY_NT             88    /* 12 slots */
+#define S_EARLY_T             100    /* 12 slots */
+#define S_MID_NT              112    /* 12 slots */
+#define S_MID_T               124    /* 12 slots */
+#define S_LATE_NT             136    /* 12 slots */
+#define S_LATE_T              148    /* 12 slots */
+#define S_END_NT              160    /* 12 slots */
+#define S_END_T               172    /* 12 slots */
+#define S_EARLY_CHAPEL        184    /* 6 slots */
+#define S_MID_CHAPEL          190    /* 6 slots */
+#define S_LATE_CHAPEL         196    /* 6 slots */
+#define S_END_CHAPEL          202    /* 6 slots */
+#define S_THRONE_ROOM_PRIO    208    /* 12 slots */
+#define S_MINE_TRASH_PRIO     220    /* 4 slots */
+#define S_BUY_TARGETS         224    /* 20 slots: (card_id, max) pairs, -1 terminated */
+#define STRATEGY_SIZE         244
 
 /* ── Limits ── */
 #define MAX_DECK   200
@@ -478,7 +479,8 @@ static void handle_special(Player *p, int card_id, const int *strat,
 static int get_phase(int turn, int provinces_remaining, const int *strat) {
     if (turn <= strat[S_EARLY_TO_MID_TURN])
         return 0;
-    else if (provinces_remaining > strat[S_MID_TO_LATE_PROV])
+    else if (provinces_remaining > strat[S_MID_TO_LATE_PROV]
+             && turn < strat[S_MID_TO_LATE_TURN])
         return 1;
     else if (provinces_remaining > strat[S_LATE_TO_END_PROV])
         return 2;

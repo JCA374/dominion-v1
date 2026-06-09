@@ -129,7 +129,7 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
     t = strategy.transitions
     ax.set_xticklabels([
         f"Early\n(turns 1–{t.early_to_mid_turn - 1})",
-        f"Mid\n(turn {t.early_to_mid_turn}+,\n>{t.mid_to_late_provinces} prov left)",
+        f"Mid\n(turn {t.early_to_mid_turn}+,\n>{t.mid_to_late_provinces} prov\nor turn <{t.mid_to_late_turn})",
         f"Late\n(≤{t.mid_to_late_provinces},\n>{t.late_to_end_provinces} prov left)",
         f"End\n(≤{t.late_to_end_provinces} prov left)",
     ])

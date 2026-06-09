@@ -15,6 +15,7 @@ from core.cards import (BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS, TREASURE_CAR
 class Transitions:
     early_to_mid_turn: int       # range [2, 15]
     mid_to_late_provinces: int   # range [2, 8]
+    mid_to_late_turn: int = 20   # range [5, 30] — fallback if provinces don't drop
     late_to_end_provinces: int = 2  # range [1, 4]
 
 
@@ -51,7 +52,8 @@ def get_current_phase(turn: int, provinces_remaining: int,
     """Return 'early', 'mid', 'late', or 'end' based on turn and province count."""
     if turn <= transitions.early_to_mid_turn:
         return "early"
-    elif provinces_remaining > transitions.mid_to_late_provinces:
+    elif (provinces_remaining > transitions.mid_to_late_provinces
+          and turn < transitions.mid_to_late_turn):
         return "mid"
     elif provinces_remaining > transitions.late_to_end_provinces:
         return "late"
@@ -193,6 +195,7 @@ def random_strategy(rng: random.Random,
         transitions=Transitions(
             early_to_mid_turn=rng.randint(2, 15),
             mid_to_late_provinces=rng.randint(2, 8),
+            mid_to_late_turn=rng.randint(5, 30),
             late_to_end_provinces=rng.randint(1, 4),
         ),
         buy_targets=buy_targets,
@@ -350,7 +353,7 @@ def describe(strategy: Strategy, fitness: float | None = None) -> str:
     lines.append(header)
 
     lines.append(f"EARLY (turns 1-{t.early_to_mid_turn}):   {fmt_list(strategy.early_buy_priority)}")
-    lines.append(f"MID   (>{t.mid_to_late_provinces} Prov):    {fmt_list(strategy.mid_buy_priority)}")
+    lines.append(f"MID   (>{t.mid_to_late_provinces} Prov or <t{t.mid_to_late_turn}): {fmt_list(strategy.mid_buy_priority)}")
     lines.append(f"LATE  ({t.late_to_end_provinces+1}-{t.mid_to_late_provinces} Prov): {fmt_list(strategy.late_buy_priority)}")
     lines.append(f"END   (<={t.late_to_end_provinces} Prov):    {fmt_list(strategy.end_buy_priority)}")
     lines.append(f"Early NonTerm: {fmt_list(strategy.early_nonterminal_priority)}")
@@ -404,7 +407,7 @@ def summarize(strategy: Strategy, vs_bm: dict) -> str:
     lines.append(f"  {'─' * 40}")
     lines.append(f"  Early game: turns 1-{t.early_to_mid_turn}")
     lines.append(f"  Mid game:   turn {t.early_to_mid_turn + 1}+ while "
-                 f">{t.mid_to_late_provinces} Provinces remain")
+                 f">{t.mid_to_late_provinces} Provinces remain and turn <{t.mid_to_late_turn}")
     lines.append(f"  Late game:  {t.mid_to_late_provinces} or fewer Provinces left, "
                  f">{t.late_to_end_provinces} remaining")
     lines.append(f"  End game:   {t.late_to_end_provinces} or fewer Provinces left")
@@ -601,10 +604,12 @@ def load_strategy(path: str) -> Strategy:
         late_ct = list(ct)
     end_ct = data.get("end_chapel_trash", ["STOP"])
 
-    # Transitions backward compat: add late_to_end_provinces default
+    # Transitions backward compat
     transitions_data = data["transitions"]
     if "late_to_end_provinces" not in transitions_data:
         transitions_data = dict(transitions_data, late_to_end_provinces=2)
+    if "mid_to_late_turn" not in transitions_data:
+        transitions_data = dict(transitions_data, mid_to_late_turn=20)
 
     return Strategy(
         early_buy_priority=data["early_buy_priority"],

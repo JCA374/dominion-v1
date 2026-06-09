@@ -79,7 +79,7 @@ _lib.init_cards(_card_data)
 # ── Strategy serialization ──
 
 # Strategy layout constants (must match dominion.c)
-STRATEGY_SIZE = 243
+STRATEGY_SIZE = 244
 
 
 def _name_to_id(name: str) -> int:
@@ -109,36 +109,37 @@ def strategy_to_ints(strategy: Strategy) -> ctypes.Array:
     # Scalar fields
     buf[0] = strategy.transitions.early_to_mid_turn
     buf[1] = strategy.transitions.mid_to_late_provinces
-    buf[2] = strategy.transitions.late_to_end_provinces
-    buf[3] = strategy.chapel_max_trash
-    buf[4] = strategy.province_max_coins
-    buf[5] = strategy.duchy_max_coins
-    buf[6] = strategy.militia_coin_threshold
+    buf[2] = strategy.transitions.mid_to_late_turn
+    buf[3] = strategy.transitions.late_to_end_provinces
+    buf[4] = strategy.chapel_max_trash
+    buf[5] = strategy.province_max_coins
+    buf[6] = strategy.duchy_max_coins
+    buf[7] = strategy.militia_coin_threshold
 
     # Priority lists
-    _write_list(buf, 7, strategy.early_buy_priority, 20)
-    _write_list(buf, 27, strategy.mid_buy_priority, 20)
-    _write_list(buf, 47, strategy.late_buy_priority, 20)
-    _write_list(buf, 67, strategy.end_buy_priority, 20)
-    _write_list(buf, 87, strategy.early_nonterminal_priority, 12)
-    _write_list(buf, 99, strategy.early_terminal_priority, 12)
-    _write_list(buf, 111, strategy.mid_nonterminal_priority, 12)
-    _write_list(buf, 123, strategy.mid_terminal_priority, 12)
-    _write_list(buf, 135, strategy.late_nonterminal_priority, 12)
-    _write_list(buf, 147, strategy.late_terminal_priority, 12)
-    _write_list(buf, 159, strategy.end_nonterminal_priority, 12)
-    _write_list(buf, 171, strategy.end_terminal_priority, 12)
-    _write_list(buf, 183, strategy.early_chapel_trash, 6)
-    _write_list(buf, 189, strategy.mid_chapel_trash, 6)
-    _write_list(buf, 195, strategy.late_chapel_trash, 6)
-    _write_list(buf, 201, strategy.end_chapel_trash, 6)
-    _write_list(buf, 207, strategy.throne_room_priority, 12)
-    _write_list(buf, 219, strategy.mine_trash_priority, 4)
+    _write_list(buf, 8, strategy.early_buy_priority, 20)
+    _write_list(buf, 28, strategy.mid_buy_priority, 20)
+    _write_list(buf, 48, strategy.late_buy_priority, 20)
+    _write_list(buf, 68, strategy.end_buy_priority, 20)
+    _write_list(buf, 88, strategy.early_nonterminal_priority, 12)
+    _write_list(buf, 100, strategy.early_terminal_priority, 12)
+    _write_list(buf, 112, strategy.mid_nonterminal_priority, 12)
+    _write_list(buf, 124, strategy.mid_terminal_priority, 12)
+    _write_list(buf, 136, strategy.late_nonterminal_priority, 12)
+    _write_list(buf, 148, strategy.late_terminal_priority, 12)
+    _write_list(buf, 160, strategy.end_nonterminal_priority, 12)
+    _write_list(buf, 172, strategy.end_terminal_priority, 12)
+    _write_list(buf, 184, strategy.early_chapel_trash, 6)
+    _write_list(buf, 190, strategy.mid_chapel_trash, 6)
+    _write_list(buf, 196, strategy.late_chapel_trash, 6)
+    _write_list(buf, 202, strategy.end_chapel_trash, 6)
+    _write_list(buf, 208, strategy.throne_room_priority, 12)
+    _write_list(buf, 220, strategy.mine_trash_priority, 4)
 
     # Buy targets: pairs of (card_id, max_count), -1 terminated
-    offset = 223
+    offset = 224
     for card_name, max_count in strategy.buy_targets.items():
-        if card_name in CARD_ID and offset < 241:
+        if card_name in CARD_ID and offset < 242:
             buf[offset] = CARD_ID[card_name]
             buf[offset + 1] = max_count
             offset += 2
