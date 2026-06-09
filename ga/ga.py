@@ -117,6 +117,13 @@ def _crossover_targets(t1: dict[str, int], t2: dict[str, int],
 
 
 
+def _crossover_chapel(c1: list[str], c2: list[str],
+                      rng: random.Random) -> list[str]:
+    """Crossover chapel trash: Curse first, STOP last, pick middle order from a parent."""
+    middle = [c for c in rng.choice([c1, c2]) if c not in ("Curse", "STOP")]
+    return ["Curse"] + middle + ["STOP"]
+
+
 def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
     """Crossover two strategies into a child."""
     return Strategy(
@@ -132,10 +139,10 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
         end_buy_priority=order_crossover(p1.end_buy_priority, p2.end_buy_priority, rng),
         end_nonterminal_priority=order_crossover(p1.end_nonterminal_priority, p2.end_nonterminal_priority, rng),
         end_terminal_priority=order_crossover(p1.end_terminal_priority, p2.end_terminal_priority, rng),
-        early_chapel_trash=["Estate", "Copper", "STOP"],
-        mid_chapel_trash=["Estate", "Copper", "STOP"],
-        late_chapel_trash=["STOP"],
-        end_chapel_trash=["STOP"],
+        early_chapel_trash=_crossover_chapel(p1.early_chapel_trash, p2.early_chapel_trash, rng),
+        mid_chapel_trash=_crossover_chapel(p1.mid_chapel_trash, p2.mid_chapel_trash, rng),
+        late_chapel_trash=_crossover_chapel(p1.late_chapel_trash, p2.late_chapel_trash, rng),
+        end_chapel_trash=_crossover_chapel(p1.end_chapel_trash, p2.end_chapel_trash, rng),
         throne_room_priority=order_crossover(
             p1.throne_room_priority, p2.throne_room_priority, rng
         ),
@@ -211,11 +218,17 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
     s.end_buy_priority = _mutate_list(s.end_buy_priority, rate, rng)
     s.end_nonterminal_priority = _mutate_list(s.end_nonterminal_priority, rate, rng, allow_pass=False)
     s.end_terminal_priority = _mutate_list(s.end_terminal_priority, rate, rng, allow_pass=False)
-    # Chapel trash is hardcoded — no mutation
-    s.early_chapel_trash = ["Estate", "Copper", "STOP"]
-    s.mid_chapel_trash = ["Estate", "Copper", "STOP"]
-    s.late_chapel_trash = ["STOP"]
-    s.end_chapel_trash = ["STOP"]
+    # Chapel trash: Curse always first, STOP always last, middle cards evolvable
+    def _mutate_chapel(trash_list):
+        middle = [c for c in trash_list if c not in ("Curse", "STOP")]
+        if len(middle) >= 2 and rng.random() < rate:
+            i, j = rng.sample(range(len(middle)), 2)
+            middle[i], middle[j] = middle[j], middle[i]
+        return ["Curse"] + middle + ["STOP"]
+    s.early_chapel_trash = _mutate_chapel(s.early_chapel_trash)
+    s.mid_chapel_trash = _mutate_chapel(s.mid_chapel_trash)
+    s.late_chapel_trash = _mutate_chapel(s.late_chapel_trash)
+    s.end_chapel_trash = _mutate_chapel(s.end_chapel_trash)
     s.chapel_max_trash = 4
     s.throne_room_priority = _mutate_list(s.throne_room_priority, rate, rng, allow_pass=False)
     s.mine_trash_priority = _mutate_list(s.mine_trash_priority, rate, rng, allow_pass=False)

@@ -1013,20 +1013,23 @@ def test_ga_chapel_crossover_preserves_stop():
         assert "STOP" in child, f"STOP missing from crossover result: {child}"
 
 
-def test_ga_chapel_trash_hardcoded():
-    """Chapel trash is hardcoded and not affected by mutation."""
+def test_ga_chapel_trash_structure():
+    """Chapel trash always starts with Curse and ends with STOP."""
     base = _make_strategy(
-        early_chapel_trash=["Duchy", "STOP", "Copper", "Estate"],
-        mid_chapel_trash=["Duchy", "STOP", "Copper", "Estate"],
-        late_chapel_trash=["Duchy", "STOP", "Copper", "Estate"],
+        early_chapel_trash=["Curse", "Copper", "Estate", "STOP"],
+        mid_chapel_trash=["Curse", "Estate", "Copper", "STOP"],
+        late_chapel_trash=["Curse", "Estate", "STOP"],
+        end_chapel_trash=["Curse", "STOP"],
     )
 
     rng = random.Random(42)
     for _ in range(50):
         mutated = mutate(base, rate=1.0, rng=rng)
-        assert mutated.early_chapel_trash == ["Estate", "Copper", "STOP"]
-        assert mutated.mid_chapel_trash == ["Estate", "Copper", "STOP"]
-        assert mutated.late_chapel_trash == ["STOP"]
+        for phase in ["early", "mid", "late", "end"]:
+            trash = getattr(mutated, f"{phase}_chapel_trash")
+            assert trash[0] == "Curse", f"{phase}: Curse must be first"
+            assert trash[-1] == "STOP", f"{phase}: STOP must be last"
+            assert "Curse" not in trash[1:-1], f"{phase}: no duplicate Curse"
         assert mutated.chapel_max_trash == 4
 
 

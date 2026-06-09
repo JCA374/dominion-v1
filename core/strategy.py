@@ -152,10 +152,10 @@ def random_strategy(rng: random.Random,
         return cards
 
     # Chapel trash is hardcoded: Estate > Copper > STOP (early/mid), STOP (late/end)
-    early_chapel = ["Estate", "Copper", "STOP"]
-    mid_chapel = ["Estate", "Copper", "STOP"]
-    late_chapel = ["STOP"]
-    end_chapel = ["STOP"]
+    early_chapel = ["Curse", "Estate", "Copper", "STOP"]
+    mid_chapel = ["Curse", "Estate", "Copper", "STOP"]
+    late_chapel = ["Curse", "STOP"]
+    end_chapel = ["Curse", "STOP"]
 
     # Buy targets: max copies to own per card (action cards 1-5, others uncapped)
     kingdom_cards = kingdom if kingdom is not None else KINGDOM_CARDS
@@ -322,10 +322,10 @@ def engine_strategy(kingdom: list[str] | None = None) -> Strategy:
         late_terminal_priority=late_t,
         end_nonterminal_priority=end_nt,
         end_terminal_priority=end_t,
-        early_chapel_trash=["Estate", "Copper", "STOP"],
-        mid_chapel_trash=["Estate", "STOP", "Copper"],
-        late_chapel_trash=["STOP"],
-        end_chapel_trash=["STOP"],
+        early_chapel_trash=["Curse", "Estate", "Copper", "STOP"],
+        mid_chapel_trash=["Curse", "Estate", "STOP", "Copper"],
+        late_chapel_trash=["Curse", "STOP"],
+        end_chapel_trash=["Curse", "STOP"],
         throne_room_priority=tr_candidates,
         mine_trash_priority=["Copper", "Silver"],
         chapel_max_trash=4,
