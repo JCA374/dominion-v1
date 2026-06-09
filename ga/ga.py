@@ -10,6 +10,8 @@ from dataclasses import asdict
 
 from core.cards import BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS
 from ga.fitness import (evaluate_population_vs_hall, make_seed_list)
+import json
+
 from core.strategy import (
     Strategy, Transitions, random_strategy, big_money_strategy,
     engine_strategy, gardens_strategy, describe, get_current_phase,
@@ -265,6 +267,20 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
     return s
 
 
+def _save_hall(hall: list[Strategy], model_dir: str) -> None:
+    """Save all hall of fame members to disk as hall/hall_N.json."""
+    hall_dir = os.path.join(model_dir, "hall")
+    os.makedirs(hall_dir, exist_ok=True)
+    # Clear old files
+    for f in os.listdir(hall_dir):
+        if f.endswith(".json"):
+            os.remove(os.path.join(hall_dir, f))
+    for i, strat in enumerate(hall):
+        path = os.path.join(hall_dir, f"hall_{i}.json")
+        with open(path, "w") as f:
+            json.dump(asdict(strat), f, indent=2)
+
+
 # ---------------------------------------------------------------------------
 # GA run loop
 # ---------------------------------------------------------------------------
@@ -440,6 +456,9 @@ def run_ga(config: dict) -> dict:
                 overall_best_fitness = -1.0  # reset so GA keeps improving vs new hall
                 print(f"  >>> Added to hall of fame (hall={len(hall)}, "
                       f"win_rate={best_fitness:.0%}) <<<")
+
+                # Save hall to disk
+                _save_hall(hall, best_model_dir)
 
             # Don't evolve after the last generation
             if gen == start_gen + generations:

@@ -558,6 +558,91 @@ def _list_gens(model_dir: str = "best_model") -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _eval_vs_opponents(strategy: Strategy, opponents: list[tuple[Strategy, str]],
+                       num_games: int = 100,
+                       kingdom: list[str] | None = None,
+                       title: str = "EVALUATION") -> None:
+    """Play the model against a list of opponents, print results table."""
+    from core.engine import play_game_2p
+
+    if kingdom is None:
+        kingdom = KINGDOM_CARDS
+
+    if not opponents:
+        print("No opponents found.")
+        return
+
+    rng = random.Random(42)
+    seeds = [rng.randint(0, 2**31) for _ in range(num_games)]
+
+    print()
+    print("=" * WIDTH)
+    print(_center(title))
+    print(_center(f"{num_games} games per opponent (seat-swapped)"))
+    print(_center(f"Kingdom: {', '.join(kingdom)}"))
+    print("=" * WIDTH)
+    print()
+
+    # Header
+    print(f"  {'Opponent':<16s} {'Win':>5s} {'Tie':>5s} {'Loss':>5s}"
+          f"  {'Turns':>5s}  {'VP±':>5s}  Final Deck (avg)")
+    print(f"  {'─' * 78}")
+
+    total_wins = 0
+    total_ties = 0
+    total_games = 0
+
+    for opp_strat, opp_label in opponents:
+        wins = ties = 0
+        total_turns = 0
+        total_vp_margin = 0
+        deck_counts: dict[str, int] = {}
+        n_games = 0
+
+        for s in seeds:
+            # Game 1: model as P1
+            r = play_game_2p(strategy, opp_strat, s, kingdom)
+            total_turns += r["turns"]
+            total_vp_margin += r["vp1"] - r["vp2"]
+            if r["vp1"] > r["vp2"]: wins += 1
+            elif r["vp1"] == r["vp2"]: ties += 1
+            for card in r["deck1"]:
+                deck_counts[card] = deck_counts.get(card, 0) + 1
+            n_games += 1
+
+            # Game 2: model as P2
+            r = play_game_2p(opp_strat, strategy, s, kingdom)
+            total_turns += r["turns"]
+            total_vp_margin += r["vp2"] - r["vp1"]
+            if r["vp2"] > r["vp1"]: wins += 1
+            elif r["vp2"] == r["vp1"]: ties += 1
+            for card in r["deck2"]:
+                deck_counts[card] = deck_counts.get(card, 0) + 1
+            n_games += 1
+
+        n = n_games
+        losses = n - wins - ties
+        avg_turns = total_turns / n
+        avg_margin = total_vp_margin / n
+        total_wins += wins
+        total_ties += ties
+        total_games += n
+
+        # Top 5 deck cards
+        avg_deck = sorted(deck_counts.items(), key=lambda x: -x[1])
+        deck_str = ", ".join(f"{count/n:.0f}x{name}" for name, count in avg_deck[:6])
+
+        print(f"  {opp_label:<16s} {wins/n:>4.0%} {ties/n:>5.0%} {losses/n:>5.0%}"
+              f"  {avg_turns:>5.1f}  {avg_margin:>+5.1f}  {deck_str}")
+
+    # Summary
+    print(f"  {'─' * 78}")
+    total_losses = total_games - total_wins - total_ties
+    print(f"  {'OVERALL':<16s} {total_wins/total_games:>4.0%}"
+          f" {total_ties/total_games:>5.0%} {total_losses/total_games:>5.0%}")
+    print()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Trace a game played by the AI model")
     parser.add_argument("--seed", type=int, default=None,
@@ -565,7 +650,9 @@ def main():
     parser.add_argument("--model", default="best_model/strategy.json",
                         help="Path to strategy JSON")
     parser.add_argument("--vs", default="bigmoney",
-                        help="Opponent: bigmoney, self, prev, a gen number, or a path")
+                        help="Opponent: bigmoney, self, prev, hall, gens, a gen number, or a path")
+    parser.add_argument("--games", type=int, default=100,
+                        help="Games per opponent for --vs hall/gens (default: 100)")
     parser.add_argument("--list", action="store_true",
                         help="List available generations and exit")
     args = parser.parse_args()
@@ -576,6 +663,36 @@ def main():
 
     strategy = load_strategy(args.model)
     model_dir = os.path.dirname(args.model) or "best_model"
+
+    if args.vs == "hall":
+        # Load saved hall of fame members
+        hall_dir = os.path.join(model_dir, "hall")
+        opponents: list[tuple[Strategy, str]] = []
+        if os.path.isdir(hall_dir):
+            for f in sorted(os.listdir(hall_dir)):
+                if f.endswith(".json"):
+                    path = os.path.join(hall_dir, f)
+                    idx = f.replace("hall_", "").replace(".json", "")
+                    label = "Big Money" if idx == "0" else f"Hall #{idx}"
+                    opponents.append((load_strategy(path), label))
+        if not opponents:
+            print("No saved hall found. Adding Big Money as fallback.")
+            opponents = [(big_money_strategy(), "Big Money")]
+        _eval_vs_opponents(strategy, opponents, num_games=args.games,
+                           title="HALL OF FAME EVALUATION")
+        return
+
+    if args.vs == "gens":
+        # Play against Big Money + every 4th saved generation
+        opponents = [(big_money_strategy(), "Big Money")]
+        gens = _find_gens(model_dir)
+        for gen in gens[::4]:  # every 4th generation
+            path = os.path.join(model_dir, f"gen_{gen:03d}", "strategy.json")
+            opponents.append((load_strategy(path), f"Gen {gen}"))
+        _eval_vs_opponents(strategy, opponents, num_games=args.games,
+                           title="EVALUATION VS GENERATIONS (every 4th)")
+        return
+
     opponent, opp_label = _resolve_opponent(args.vs, model_dir)
 
     trace_game(strategy, opponent,
