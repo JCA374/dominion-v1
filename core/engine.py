@@ -235,25 +235,47 @@ def _has_moat(state: GameState) -> bool:
 
 
 def militia_discard(state: GameState, strategy: Strategy) -> None:
-    """Discard cards from hand until hand size is 3, using coin threshold heuristic."""
+    """Discard cards from hand until hand size is 3, using coin threshold heuristic.
+
+    Uses the evolved action priority lists to decide which actions are least
+    valuable (discard low-priority actions first).
+    """
+    from core.strategy import get_current_phase, get_action_priorities
+
     if len(state.hand) <= 3:
         return
     threshold = strategy.militia_coin_threshold
     hand_coins = sum(ALL_CARDS[c].coins for c in state.hand
                      if ALL_CARDS[c].card_type == CardType.TREASURE)
 
+    # Get action priority for current phase (most valuable first)
+    phase = get_current_phase(state.turn, state.supply.get("Province", 0),
+                              strategy.transitions)
+    nt_prio, t_prio = get_action_priorities(strategy, phase)
+    # Combined: nonterminals are generally more valuable than terminals
+    action_priority = list(nt_prio) + list(t_prio)
+
+    # Rank actions in hand: lower index = more valuable = discard last
+    # Actions not in priority list get discarded first
+    def action_discard_rank(card_name):
+        if card_name in action_priority:
+            # Reverse: high priority index = discard first (least valuable last)
+            return len(action_priority) - action_priority.index(card_name)
+        return 0  # unknown actions discarded first
+
+    hand_actions = sorted(
+        [c for c in state.hand if ALL_CARDS[c].card_type == CardType.ACTION],
+        key=action_discard_rank,
+    )
+
     if hand_coins >= threshold:
         # High money mode: keep treasures, discard junk/actions first
-        discard_order = ["Curse", "Estate", "Duchy",
-                         # then action cards (any not in the priority list below)
-                         ] + [c for c in state.hand
-                              if ALL_CARDS[c].card_type == CardType.ACTION] + [
+        discard_order = ["Curse", "Estate", "Duchy"] + hand_actions + [
                          "Copper", "Silver", "Gold", "Province"]
     else:
-        # Low money mode: keep actions/engine, discard junk/copper first
+        # Low money mode: keep best actions/engine, discard junk/copper first
         discard_order = ["Curse", "Copper", "Estate", "Duchy",
-                         "Silver"] + [c for c in state.hand
-                                      if ALL_CARDS[c].card_type == CardType.ACTION] + [
+                         "Silver"] + hand_actions + [
                          "Gold", "Province"]
 
     while len(state.hand) > 3:

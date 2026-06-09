@@ -14,6 +14,7 @@ from ga.ga import run_ga, mutate
 from core.strategy import describe, summarize, save_best_model, load_strategy, random_strategy
 from viz.plotting import save_all_plots
 from ga.fitness import evaluate_vs_opponent, evaluate_vs_hall, make_seed_list
+import glob
 import os
 import random
 
@@ -76,6 +77,8 @@ def main():
     start_gen = 0
     initial_population = None
 
+    hall = None  # will default to [Big Money] in run_ga
+
     if continuing:
         if not os.path.exists("best_model/strategy.json"):
             print("ERROR: No best_model/strategy.json found. Run a fresh training first.")
@@ -84,7 +87,15 @@ def main():
         start_gen = _find_last_gen()
         rng = random.Random(SEED + start_gen)
         initial_population = _build_continue_population(best, POP_SIZE, rng, KINGDOM)
-        print(f"=== Continuing from generation {start_gen} ===")
+
+        # Restore hall of fame from disk
+        hall_dir = "best_model/hall"
+        hall_files = sorted(glob.glob(os.path.join(hall_dir, "hall_*.json")))
+        if hall_files:
+            hall = [load_strategy(f) for f in hall_files]
+            print(f"=== Continuing from generation {start_gen}, hall restored ({len(hall)} members) ===")
+        else:
+            print(f"=== Continuing from generation {start_gen}, no saved hall found ===")
     else:
         print(f"=== Phase-Aware GA for Simplified Dominion ===")
 
@@ -116,6 +127,8 @@ def main():
         "initial_population": initial_population,
         "csv_append": continuing,
     }
+    if hall is not None:
+        config["hall"] = hall
 
     start = time.time()
     result = run_ga(config)

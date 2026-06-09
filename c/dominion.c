@@ -298,11 +298,41 @@ static int has_moat(const Player *p) {
     return arr_contains(p->hand, p->hand_n, MOAT);
 }
 
+/* Forward declaration */
+static int get_phase(int turn, int provinces_remaining, const int *strat);
+
+/* ── Rank an action card for militia discard using evolved action priority ──
+ * Lower rank = discard first (least valuable).
+ * Checks both nonterminal and terminal lists for the opponent's phase.
+ * Nonterminals are ranked higher (kept longer) than terminals.
+ */
+static int action_keep_rank(int card_id, const int *opp_strat, int opp_phase) {
+    /* Pick the right priority lists for the opponent's phase */
+    const int *nt_prio, *t_prio;
+    if (opp_phase == 0)      { nt_prio = opp_strat + S_EARLY_NT; t_prio = opp_strat + S_EARLY_T; }
+    else if (opp_phase == 1) { nt_prio = opp_strat + S_MID_NT;   t_prio = opp_strat + S_MID_T; }
+    else if (opp_phase == 2) { nt_prio = opp_strat + S_LATE_NT;   t_prio = opp_strat + S_LATE_T; }
+    else                     { nt_prio = opp_strat + S_END_NT;    t_prio = opp_strat + S_END_T; }
+
+    /* Nonterminals: higher base rank (more valuable to keep) */
+    for (int i = 0; i < 12 && nt_prio[i] != -1; i++) {
+        if (nt_prio[i] == card_id)
+            return 200 + (12 - i);  /* top NT = 212, lowest = 201 */
+    }
+    /* Terminals: lower base rank */
+    for (int i = 0; i < 12 && t_prio[i] != -1; i++) {
+        if (t_prio[i] == card_id)
+            return 100 + (12 - i);  /* top T = 112, lowest = 101 */
+    }
+    return 0;  /* unknown action: discard first */
+}
+
 /* ── Militia discard: opponent discards down to 3 cards ── */
-static void militia_discard(Player *p, const int *opp_strat) {
+static void militia_discard(Player *p, const int *opp_strat, const int *supply) {
     if (p->hand_n <= 3) return;
 
     int threshold = opp_strat[S_MILITIA_COIN_THRESH];
+    int opp_phase = get_phase(p->turn, supply[PROVINCE], opp_strat);
 
     /* Count treasure coins in hand */
     int hand_coins = 0;
@@ -311,58 +341,59 @@ static void militia_discard(Player *p, const int *opp_strat) {
             hand_coins += card_coins[p->hand[i]];
     }
 
-    /* Build discard priority based on threshold.
-     * High money (>= threshold): Curse, Estate, Duchy, actions, Copper, Silver, Gold, Province
-     * Low money (< threshold):   Curse, Copper, Estate, Duchy, Silver, actions, Gold, Province
+    /* Discard priority:
+     * High money (>= threshold): Curse, Estate, Duchy, actions(worst first), Copper, Silver, Gold, Province
+     * Low money (< threshold):   Curse, Copper, Estate, Duchy, Silver, actions(worst first), Gold, Province
+     * Actions are ranked using the evolved action priority lists.
      */
     while (p->hand_n > 3) {
         int best_idx = -1;
+        int best_rank = 999;
 
-        if (hand_coins >= threshold) {
-            /* High money: discard junk/actions first, keep treasures */
-            /* Priority: Curse > Estate > Duchy > actions > Copper > Silver > Gold > Province */
-            int best_rank = 999;
-            for (int i = 0; i < p->hand_n; i++) {
-                int c = p->hand[i];
-                int rank;
-                if (c == CURSE) rank = 0;
-                else if (c == ESTATE) rank = 1;
-                else if (c == DUCHY) rank = 2;
-                else if (card_type[c] == TYPE_ACTION) rank = 3;
-                else if (c == COPPER) rank = 4;
-                else if (c == SILVER) rank = 5;
-                else if (c == GOLD) rank = 6;
-                else if (c == PROVINCE) rank = 7;
-                else rank = 3; /* unknown cards treated as actions */
-                if (rank < best_rank) {
-                    best_rank = rank;
-                    best_idx = i;
+        for (int i = 0; i < p->hand_n; i++) {
+            int c = p->hand[i];
+            int rank;
+
+            if (c == CURSE) {
+                rank = 0;
+            } else if (card_type[c] == TYPE_ACTION) {
+                /* Use evolved priority: lower keep_rank = less valuable = discard sooner */
+                int keep = action_keep_rank(c, opp_strat, opp_phase);
+                if (hand_coins >= threshold) {
+                    /* High money: actions discarded after junk VP, before treasures */
+                    /* keep 0..212 mapped to rank 30..300 (inverted: low keep = low rank = discard first) */
+                    rank = 300 - keep;
+                } else {
+                    /* Low money: actions kept longer, discarded after Silver */
+                    rank = 700 - keep;
                 }
+            } else if (hand_coins >= threshold) {
+                /* High money: Curse(0) > Estate > Duchy > [actions] > Copper > Silver > Gold > Province */
+                if (c == ESTATE) rank = 10;
+                else if (c == DUCHY) rank = 20;
+                else if (c == COPPER) rank = 400;
+                else if (c == SILVER) rank = 500;
+                else if (c == GOLD) rank = 600;
+                else if (c == PROVINCE) rank = 900;
+                else rank = 300;
+            } else {
+                /* Low money: Curse(0) > Copper > Estate > Duchy > Silver > [actions] > Gold > Province */
+                if (c == COPPER) rank = 10;
+                else if (c == ESTATE) rank = 20;
+                else if (c == DUCHY) rank = 30;
+                else if (c == SILVER) rank = 40;
+                else if (c == GOLD) rank = 800;
+                else if (c == PROVINCE) rank = 900;
+                else rank = 500;
             }
-        } else {
-            /* Low money: discard copper/junk first, keep actions */
-            /* Priority: Curse > Copper > Estate > Duchy > Silver > actions > Gold > Province */
-            int best_rank = 999;
-            for (int i = 0; i < p->hand_n; i++) {
-                int c = p->hand[i];
-                int rank;
-                if (c == CURSE) rank = 0;
-                else if (c == COPPER) rank = 1;
-                else if (c == ESTATE) rank = 2;
-                else if (c == DUCHY) rank = 3;
-                else if (c == SILVER) rank = 4;
-                else if (card_type[c] == TYPE_ACTION) rank = 5;
-                else if (c == GOLD) rank = 6;
-                else if (c == PROVINCE) rank = 7;
-                else rank = 5;
-                if (rank < best_rank) {
-                    best_rank = rank;
-                    best_idx = i;
-                }
+
+            if (rank < best_rank) {
+                best_rank = rank;
+                best_idx = i;
             }
         }
 
-        if (best_idx < 0) break; /* shouldn't happen */
+        if (best_idx < 0) break;
 
         /* Move card from hand to discard */
         int card = p->hand[best_idx];
@@ -374,9 +405,9 @@ static void militia_discard(Player *p, const int *opp_strat) {
 }
 
 /* ── Play Militia attack against opponent ── */
-static void play_militia_attack(Player *opponent, const int *opp_strat) {
+static void play_militia_attack(Player *opponent, const int *opp_strat, const int *supply) {
     if (has_moat(opponent)) return;
-    militia_discard(opponent, opp_strat);
+    militia_discard(opponent, opp_strat, supply);
 }
 
 /* ── Play Witch attack against opponent ── */
@@ -418,7 +449,7 @@ static void play_throne_room(Player *p, const int *strat, int phase, int *supply
         else if (sp == SPECIAL_MINE)
             play_mine(p, strat, supply);
         else if (sp == SPECIAL_MILITIA && opponent)
-            play_militia_attack(opponent, opp_strat);
+            play_militia_attack(opponent, opp_strat, supply);
         else if (sp == SPECIAL_WITCH && opponent)
             play_witch_attack(opponent, supply);
     }
@@ -438,7 +469,7 @@ static void handle_special(Player *p, int card_id, const int *strat,
     else if (sp == SPECIAL_MINE)
         play_mine(p, strat, supply);
     else if (sp == SPECIAL_MILITIA && opponent)
-        play_militia_attack(opponent, opp_strat);
+        play_militia_attack(opponent, opp_strat, supply);
     else if (sp == SPECIAL_WITCH && opponent)
         play_witch_attack(opponent, supply);
 }
