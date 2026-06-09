@@ -25,6 +25,7 @@ from core.engine import (
     is_game_over, count_vp, resolve_action, apply_action_effects,
     auto_play_treasures, buy_card, trash_card,
     play_moneylender, play_chapel, play_mine, _new_player,
+    play_militia, play_witch, militia_discard, _has_moat,
 )
 from core.strategy import (
     Strategy, load_strategy, big_money_strategy,
@@ -116,8 +117,36 @@ def _deck_summary_by_type(state: GameState) -> tuple[str, str, str]:
 # Traced phases — collect lines instead of printing directly
 # ---------------------------------------------------------------------------
 
+def _traced_attack(state: GameState, card_name: str,
+                   opponents: list[tuple[GameState, Strategy]] | None) -> list[str]:
+    """Resolve attack effects and return trace lines."""
+    lines = []
+    if not opponents:
+        return lines
+    special = ALL_CARDS[card_name].special
+    for opp_state, opp_strat in opponents:
+        if special == "militia":
+            if _has_moat(opp_state):
+                lines.append("  opponent reveals Moat — blocked!")
+            else:
+                before = len(opp_state.hand)
+                militia_discard(opp_state, opp_strat)
+                lines.append(f"  opponent discards {before - len(opp_state.hand)} card(s) to {len(opp_state.hand)}")
+        elif special == "witch":
+            if _has_moat(opp_state):
+                lines.append("  opponent reveals Moat — blocked!")
+            elif state.supply.get("Curse", 0) > 0:
+                state.supply["Curse"] -= 1
+                opp_state.discard.append("Curse")
+                lines.append(f"  opponent gains Curse ({state.supply['Curse']} left)")
+            else:
+                lines.append("  (no Curses left)")
+    return lines
+
+
 def _traced_action_tier(state: GameState, strategy: Strategy,
-                        priority: list[str], phase: str) -> list[str]:
+                        priority: list[str], phase: str,
+                        opponents: list[tuple[GameState, Strategy]] | None = None) -> list[str]:
     """Play one tier of actions, return trace lines."""
     lines = []
     while state.actions > 0:
@@ -150,13 +179,15 @@ def _traced_action_tier(state: GameState, strategy: Strategy,
                     else:
                         lines.append("  (no Copper to trash)")
                 elif card.special == "throne_room":
-                    lines.extend(traced_throne_room(state, strategy, phase))
+                    lines.extend(traced_throne_room(state, strategy, phase, opponents))
                 elif card.special == "mine":
                     result = play_mine(state, strategy)
                     if result:
                         lines.append(f"  TRASH {result[0]} -> gain {result[1]}")
                     else:
                         lines.append("  (nothing to upgrade)")
+                elif card.special in ("militia", "witch"):
+                    lines.extend(_traced_attack(state, card_name, opponents))
 
                 played = True
                 break
@@ -165,13 +196,14 @@ def _traced_action_tier(state: GameState, strategy: Strategy,
     return lines
 
 
-def traced_action_phase(state: GameState, strategy: Strategy) -> list[str]:
+def traced_action_phase(state: GameState, strategy: Strategy,
+                        opponents: list[tuple[GameState, Strategy]] | None = None) -> list[str]:
     """Play action phase: non-terminals first, then terminals."""
     phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
     nt_priority, t_priority = get_action_priorities(strategy, phase)
     lines = []
-    lines.extend(_traced_action_tier(state, strategy, nt_priority, phase))
-    lines.extend(_traced_action_tier(state, strategy, t_priority, phase))
+    lines.extend(_traced_action_tier(state, strategy, nt_priority, phase, opponents))
+    lines.extend(_traced_action_tier(state, strategy, t_priority, phase, opponents))
     return lines
 
 
@@ -194,7 +226,8 @@ def traced_chapel(state: GameState, strategy: Strategy,
 
 
 def traced_throne_room(state: GameState, strategy: Strategy,
-                       phase: str = "mid") -> list[str]:
+                       phase: str = "mid",
+                       opponents: list[tuple[GameState, Strategy]] | None = None) -> list[str]:
     """Choose best action from hand, play it twice, return trace lines."""
     lines = []
     # Pick highest-priority action using throne_room_priority
@@ -243,6 +276,8 @@ def traced_throne_room(state: GameState, strategy: Strategy,
                 lines.append(f"    TRASH {result[0]} -> gain {result[1]}")
             else:
                 lines.append("    (nothing to upgrade)")
+        elif target_card.special in ("militia", "witch"):
+            lines.extend(_traced_attack(state, target, opponents))
 
     return lines
 
@@ -321,7 +356,8 @@ def _render_turn(lines: list[str], side: str) -> None:
                 print(_right(part))
 
 
-def _play_turn(player: GameState, strategy: Strategy, phase: str) -> list[str]:
+def _play_turn(player: GameState, strategy: Strategy, phase: str,
+               opponents: list[tuple[GameState, Strategy]] | None = None) -> list[str]:
     """Execute one turn and return all trace lines."""
     lines = []
 
@@ -331,7 +367,7 @@ def _play_turn(player: GameState, strategy: Strategy, phase: str) -> list[str]:
     lines.append(f"Deck: {total} cards ({len(player.deck)} draw)")
 
     # Action phase
-    lines.extend(traced_action_phase(player, strategy))
+    lines.extend(traced_action_phase(player, strategy, opponents))
 
     # Buy phase
     lines.extend(traced_buy_phase(player, strategy))
@@ -399,6 +435,10 @@ def trace_game(strategy1: Strategy, strategy2: Strategy,
             )
             provs = player.supply["Province"]
 
+            # Build opponents list for attack resolution
+            opponents = [(players[j], strategies[j])
+                         for j in range(len(players)) if j != i]
+
             # Turn header in center for first player, skip for second
             if i == 0:
                 print(_center(f"── Turn {round_num} · {provs} Prov left ──"))
@@ -406,7 +446,7 @@ def trace_game(strategy1: Strategy, strategy2: Strategy,
             # Phase label
             side = sides[i]
             turn_lines = [f"[{phase}]"]
-            turn_lines.extend(_play_turn(player, strategy, phase))
+            turn_lines.extend(_play_turn(player, strategy, phase, opponents))
             _render_turn(turn_lines, side)
             print()
 
