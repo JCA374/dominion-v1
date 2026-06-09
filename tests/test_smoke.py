@@ -10,6 +10,7 @@ from core.cards import (ALL_CARDS, BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS,
 from core.engine import (
     new_game, play_game, play_game_2p, play_action_phase, play_buy_phase,
     play_chapel, play_moneylender, play_throne_room, play_mine,
+    play_militia, play_witch, militia_discard, _has_moat,
     auto_play_treasures, cleanup,
     is_game_over, count_vp, default_supply, GameState, draw_cards,
 )
@@ -24,8 +25,8 @@ from ga.ga import order_crossover, mutate, crossover, init_population
 
 
 def test_card_definitions():
-    """All 18 cards defined with correct costs."""
-    assert len(ALL_CARDS) == 18
+    """All 22 cards defined with correct costs."""
+    assert len(ALL_CARDS) == 22
     assert ALL_CARDS["Copper"].cost == 0
     assert ALL_CARDS["Province"].cost == 8
     assert ALL_CARDS["Province"].vp == 6
@@ -1554,6 +1555,8 @@ def test_ga_best_strategy_beats_big_money():
     """GA output must beat Big Money >= 50%."""
     from ga.ga import run_ga
 
+    # Use original 12-card kingdom (no attack cards) for deterministic convergence
+    base_kingdom = [c for c in KINGDOM_CARDS if c not in ("Militia", "Witch", "Moat")]
     result = run_ga({
         "pop_size": 20,
         "generations": 15,
@@ -1562,7 +1565,7 @@ def test_ga_best_strategy_beats_big_money():
         "elite_count": 2,
         "mutation_rate": 0.15,
         "seed": 42,
-        "kingdom": KINGDOM_CARDS,
+        "kingdom": base_kingdom,
         "hall_add_threshold": 0.55,
         "hall_max_size": 4,
         "csv_path": "/tmp/test_ga_bm.csv",
@@ -1571,7 +1574,7 @@ def test_ga_best_strategy_beats_big_money():
 
     rng = random.Random(99)
     seeds = make_seed_list(100, rng)
-    vs = evaluate_vs_opponent(result["best_strategy"], seeds, KINGDOM_CARDS,
+    vs = evaluate_vs_opponent(result["best_strategy"], seeds, base_kingdom,
                               opponent=None, need_deck=True)
     assert vs["win_rate"] >= 0.50, (
         f"GA best should beat Big Money >=50%, got {vs['win_rate']:.0%}")
@@ -1581,6 +1584,7 @@ def test_hall_of_fame_prevents_bm_drift():
     """GA with hall of fame (BM always in hall) must still beat Big Money."""
     from ga.ga import run_ga
 
+    base_kingdom = [c for c in KINGDOM_CARDS if c not in ("Militia", "Witch", "Moat")]
     result = run_ga({
         "pop_size": 20,
         "generations": 15,
@@ -1589,7 +1593,7 @@ def test_hall_of_fame_prevents_bm_drift():
         "elite_count": 2,
         "mutation_rate": 0.15,
         "seed": 42,
-        "kingdom": KINGDOM_CARDS,
+        "kingdom": base_kingdom,
         "hall_add_threshold": 0.55,
         "hall_max_size": 4,
         "csv_path": "/tmp/test_ga_hall.csv",
@@ -1599,7 +1603,7 @@ def test_hall_of_fame_prevents_bm_drift():
     # Big Money is always in the hall, so GA should maintain competitiveness
     rng = random.Random(99)
     seeds = make_seed_list(100, rng)
-    vs = evaluate_vs_opponent(result["best_strategy"], seeds, KINGDOM_CARDS,
+    vs = evaluate_vs_opponent(result["best_strategy"], seeds, base_kingdom,
                               opponent=None)
     assert vs["win_rate"] >= 0.40, (
         f"Hall-of-fame GA should still beat BM >=40%, got {vs['win_rate']:.0%}")
@@ -1793,6 +1797,191 @@ def test_c_engine_consistent_with_python():
     assert abs(py_result["mean_turns"] - c_result["mean_turns"]) < 5, (
         f"Turn counts differ too much: Python={py_result['mean_turns']:.1f} "
         f"C={c_result['mean_turns']:.1f}")
+
+
+# ---------------------------------------------------------------------------
+# Attack cards: Witch, Militia, Moat, Curse
+# ---------------------------------------------------------------------------
+
+def _make_player_state(hand, deck=None, discard=None, supply=None):
+    """Helper to create a player state with specific hand/deck/discard."""
+    state = GameState()
+    state.rng = random.Random(42)
+    state.hand = list(hand)
+    state.deck = list(deck or [])
+    state.discard = list(discard or [])
+    state.supply = supply or default_supply(KINGDOM_CARDS, num_players=2)
+    return state
+
+
+def test_curse_negative_vp():
+    """Curse cards count as -1 VP."""
+    state = _make_player_state(hand=["Estate", "Curse", "Curse"])
+    assert count_vp(state) == -1  # 1 - 1 - 1
+
+
+def test_curse_in_supply_with_attacks():
+    """Curse pile exists when attack cards in kingdom."""
+    supply = default_supply(KINGDOM_CARDS, num_players=2)
+    assert "Curse" in supply
+    assert supply["Curse"] == 10
+
+
+def test_no_curse_without_attacks():
+    """No Curse pile when no attack cards in kingdom."""
+    peaceful_kingdom = ["Village", "Smithy", "Market", "Laboratory",
+                        "Festival", "Chapel", "Throne Room", "Council Room",
+                        "Moneylender", "Gardens"]
+    supply = default_supply(peaceful_kingdom, num_players=2)
+    assert supply.get("Curse", 0) == 0
+
+
+def test_witch_gives_curse():
+    """Witch gives a Curse to each opponent without Moat."""
+    attacker = _make_player_state(hand=["Witch"])
+    defender = _make_player_state(hand=["Copper", "Copper", "Silver", "Estate", "Gold"])
+    strat = big_money_strategy()
+
+    # Witch draws 2 cards — resolve that, then trigger attack
+    play_witch(attacker, [(defender, strat)])
+
+    assert "Curse" in defender.discard
+    assert attacker.supply["Curse"] == 9
+
+
+def test_witch_blocked_by_moat():
+    """Moat in hand blocks Witch's Curse-giving."""
+    attacker = _make_player_state(hand=["Witch"])
+    defender = _make_player_state(hand=["Moat", "Copper", "Silver", "Estate", "Gold"])
+    strat = big_money_strategy()
+
+    play_witch(attacker, [(defender, strat)])
+
+    assert "Curse" not in defender.discard
+    assert attacker.supply["Curse"] == 10
+
+
+def test_witch_empty_curse_supply():
+    """Witch does nothing when Curse supply is empty."""
+    attacker = _make_player_state(hand=["Witch"])
+    attacker.supply["Curse"] = 0
+    defender = _make_player_state(hand=["Copper"] * 5)
+    defender.supply = attacker.supply
+    strat = big_money_strategy()
+
+    play_witch(attacker, [(defender, strat)])
+
+    assert "Curse" not in defender.discard
+
+
+def test_militia_forces_discard():
+    """Militia forces opponent to discard down to 3 cards."""
+    attacker = _make_player_state(hand=["Militia"])
+    defender = _make_player_state(hand=["Copper", "Silver", "Gold", "Estate", "Province"])
+    strat = big_money_strategy()
+
+    play_militia(attacker, [(defender, strat)])
+
+    assert len(defender.hand) == 3
+
+
+def test_militia_no_effect_on_small_hand():
+    """Militia does nothing if opponent has 3 or fewer cards."""
+    attacker = _make_player_state(hand=["Militia"])
+    defender = _make_player_state(hand=["Copper", "Silver"])
+    strat = big_money_strategy()
+
+    play_militia(attacker, [(defender, strat)])
+
+    assert len(defender.hand) == 2
+
+
+def test_militia_blocked_by_moat():
+    """Moat in hand blocks Militia's discard effect."""
+    attacker = _make_player_state(hand=["Militia"])
+    defender = _make_player_state(hand=["Moat", "Copper", "Silver", "Gold", "Estate"])
+    strat = big_money_strategy()
+
+    play_militia(attacker, [(defender, strat)])
+
+    assert len(defender.hand) == 5
+
+
+def test_militia_discard_high_money_keeps_treasures():
+    """With high money, militia discard keeps treasures over actions."""
+    state = _make_player_state(hand=["Gold", "Silver", "Copper", "Village", "Curse"])
+    strat = big_money_strategy()
+    strat.militia_coin_threshold = 5  # coins = 6 (Gold+Silver+Copper) >= 5
+
+    militia_discard(state, strat)
+
+    assert len(state.hand) == 3
+    # Should discard Curse and Village first, keep treasures
+    assert "Curse" not in state.hand
+    assert "Village" not in state.hand
+
+
+def test_militia_discard_low_money_keeps_actions():
+    """With low money, militia discard keeps actions over coppers."""
+    state = _make_player_state(hand=["Copper", "Copper", "Village", "Smithy", "Estate"])
+    strat = big_money_strategy()
+    strat.militia_coin_threshold = 5  # coins = 2 (Copper+Copper) < 5
+
+    militia_discard(state, strat)
+
+    assert len(state.hand) == 3
+    # Low money: discard Copper first (junk), keep actions + Estate for VP
+    assert "Copper" not in state.hand
+    assert "Village" in state.hand
+    assert "Smithy" in state.hand
+
+
+def test_moat_draws_two_cards():
+    """Moat draws 2 cards when played as an action."""
+    state = _make_player_state(
+        hand=["Moat", "Copper", "Copper"],
+        deck=["Silver", "Gold", "Estate"]
+    )
+    state.actions = 1
+    from core.engine import resolve_action
+    resolve_action(state, "Moat")
+
+    assert len(state.hand) == 4  # 2 original + 2 drawn
+    assert state.actions == 0  # terminal (no +actions)
+    assert "Moat" in state.play_area
+
+
+def test_2p_game_with_attacks():
+    """Full 2-player game with attack cards in kingdom completes."""
+    kingdom = ["Village", "Smithy", "Market", "Laboratory", "Festival",
+               "Chapel", "Throne Room", "Militia", "Witch", "Moat"]
+    s1 = big_money_strategy(kingdom)
+    s2 = engine_strategy(kingdom)
+    result = play_game_2p(s1, s2, rng_seed=42, kingdom=kingdom)
+    assert result["turns"] > 0
+    assert result["turns"] <= 40
+
+
+def test_new_cards_in_card_ids():
+    """New cards have correct IDs and are in all lookup tables."""
+    from core.cards import CARD_ID, CARD_NAME
+    assert CARD_ID["Curse"] == 18
+    assert CARD_ID["Militia"] == 19
+    assert CARD_ID["Witch"] == 20
+    assert CARD_ID["Moat"] == 21
+    assert CARD_NAME[18] == "Curse"
+    assert CARD_NAME[19] == "Militia"
+    assert CARD_NAME[20] == "Witch"
+    assert CARD_NAME[21] == "Moat"
+
+
+def test_militia_in_buy_priority():
+    """Militia appears in random strategy buy priorities."""
+    rng = random.Random(42)
+    kingdom = KINGDOM_CARDS
+    strat = random_strategy(rng, kingdom)
+    all_buyable = strat.early_buy_priority + strat.mid_buy_priority + strat.late_buy_priority
+    assert "Militia" in all_buyable
 
 
 if __name__ == "__main__":

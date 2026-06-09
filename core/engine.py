@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from core.cards import ALL_CARDS, CardType, KINGDOM_CARDS
+from core.cards import ALL_CARDS, CardType, KINGDOM_CARDS, ATTACK_CARDS
 
 if TYPE_CHECKING:
     from core.strategy import Strategy
@@ -47,6 +47,9 @@ def default_supply(kingdom: list[str] | None = None,
             supply[name] = 12  # victory kingdom cards match base victory count
         else:
             supply[name] = 10
+    # Add Curse pile if any attack card is in kingdom
+    if any(name in ATTACK_CARDS for name in kingdom):
+        supply["Curse"] = 10 * (num_players - 1)
     return supply
 
 
@@ -148,38 +151,50 @@ def trash_card(state: GameState, card_name: str) -> None:
 # Strategy-driven phases — used by GA / AI opponents
 # ---------------------------------------------------------------------------
 
+def _handle_special(state: GameState, card_name: str, strategy: Strategy,
+                    phase: str,
+                    opponents: list[tuple[GameState, Strategy]] | None) -> None:
+    """Handle special card effects after resolving an action."""
+    special = ALL_CARDS[card_name].special
+    if special == "chapel":
+        play_chapel(state, strategy, phase)
+    elif special == "moneylender":
+        play_moneylender(state)
+    elif special == "throne_room":
+        play_throne_room(state, strategy, phase, opponents)
+    elif special == "mine":
+        play_mine(state, strategy)
+    elif special == "militia" and opponents:
+        play_militia(state, opponents)
+    elif special == "witch" and opponents:
+        play_witch(state, opponents)
+
+
 def _play_action_tier(state: GameState, strategy: Strategy,
-                      priority: list[str], phase: str) -> None:
+                      priority: list[str], phase: str,
+                      opponents: list[tuple[GameState, Strategy]] | None = None) -> None:
     """Play actions from a single tier (nonterminal or terminal)."""
     while state.actions > 0:
         played = False
         for card_name in priority:
             if card_name in state.hand and state.actions > 0:
                 resolve_action(state, card_name)
-
-                if ALL_CARDS[card_name].special == "chapel":
-                    play_chapel(state, strategy, phase)
-                elif ALL_CARDS[card_name].special == "moneylender":
-                    play_moneylender(state)
-                elif ALL_CARDS[card_name].special == "throne_room":
-                    play_throne_room(state, strategy, phase)
-                elif ALL_CARDS[card_name].special == "mine":
-                    play_mine(state, strategy)
-
+                _handle_special(state, card_name, strategy, phase, opponents)
                 played = True
                 break  # re-scan from top of priority list
         if not played:
             break
 
 
-def play_action_phase(state: GameState, strategy: Strategy) -> None:
+def play_action_phase(state: GameState, strategy: Strategy,
+                      opponents: list[tuple[GameState, Strategy]] | None = None) -> None:
     """Play action cards: all non-terminals first, then terminals."""
     from core.strategy import get_current_phase, get_action_priorities
     phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
     nt_priority, t_priority = get_action_priorities(strategy, phase)
 
-    _play_action_tier(state, strategy, nt_priority, phase)
-    _play_action_tier(state, strategy, t_priority, phase)
+    _play_action_tier(state, strategy, nt_priority, phase, opponents)
+    _play_action_tier(state, strategy, t_priority, phase, opponents)
 
 
 def play_moneylender(state: GameState) -> bool:
@@ -214,8 +229,69 @@ def play_mine(state: GameState, strategy: Strategy) -> tuple[str, str] | None:
     return None
 
 
+def _has_moat(state: GameState) -> bool:
+    """Check if player has Moat in hand (blocks attacks)."""
+    return "Moat" in state.hand
+
+
+def militia_discard(state: GameState, strategy: Strategy) -> None:
+    """Discard cards from hand until hand size is 3, using coin threshold heuristic."""
+    if len(state.hand) <= 3:
+        return
+    threshold = strategy.militia_coin_threshold
+    hand_coins = sum(ALL_CARDS[c].coins for c in state.hand
+                     if ALL_CARDS[c].card_type == CardType.TREASURE)
+
+    if hand_coins >= threshold:
+        # High money mode: keep treasures, discard junk/actions first
+        discard_order = ["Curse", "Estate", "Duchy",
+                         # then action cards (any not in the priority list below)
+                         ] + [c for c in state.hand
+                              if ALL_CARDS[c].card_type == CardType.ACTION] + [
+                         "Copper", "Silver", "Gold", "Province"]
+    else:
+        # Low money mode: keep actions/engine, discard junk/copper first
+        discard_order = ["Curse", "Copper", "Estate", "Duchy",
+                         "Silver"] + [c for c in state.hand
+                                      if ALL_CARDS[c].card_type == CardType.ACTION] + [
+                         "Gold", "Province"]
+
+    while len(state.hand) > 3:
+        discarded = False
+        for card_name in discard_order:
+            if card_name in state.hand:
+                state.hand.remove(card_name)
+                state.discard.append(card_name)
+                discarded = True
+                break
+        if not discarded:
+            # Fallback: discard first card in hand
+            state.discard.append(state.hand.pop(0))
+
+
+def play_militia(state: GameState,
+                 opponents: list[tuple[GameState, Strategy]]) -> None:
+    """Each opponent discards down to 3 cards (unless they have Moat)."""
+    for opp_state, opp_strategy in opponents:
+        if _has_moat(opp_state):
+            continue
+        militia_discard(opp_state, opp_strategy)
+
+
+def play_witch(state: GameState,
+               opponents: list[tuple[GameState, Strategy]]) -> None:
+    """Each opponent gains a Curse (unless they have Moat or Curse supply empty)."""
+    for opp_state, opp_strategy in opponents:
+        if _has_moat(opp_state):
+            continue
+        if state.supply.get("Curse", 0) > 0:
+            state.supply["Curse"] -= 1
+            opp_state.discard.append("Curse")
+
+
 def play_throne_room(state: GameState, strategy: Strategy,
-                     phase: str = "mid") -> str | None:
+                     phase: str = "mid",
+                     opponents: list[tuple[GameState, Strategy]] | None = None) -> str | None:
     """Choose the best action from hand and play it twice.
 
     Uses strategy.throne_room_priority to pick the target.
@@ -234,16 +310,9 @@ def play_throne_room(state: GameState, strategy: Strategy,
     state.hand.remove(target)
     state.play_area.append(target)
 
-    card = ALL_CARDS[target]
     for _ in range(2):
         apply_action_effects(state, target)
-
-        if card.special == "chapel":
-            play_chapel(state, strategy, phase)
-        elif card.special == "moneylender":
-            play_moneylender(state)
-        elif card.special == "mine":
-            play_mine(state, strategy)
+        _handle_special(state, target, strategy, phase, opponents)
 
     return target
 
@@ -389,7 +458,7 @@ def play_game_2p(strategy1: Strategy, strategy2: Strategy, rng_seed: int,
 
     while True:
         round_num += 1
-        for player, strategy in zip(players, strategies):
+        for i, (player, strategy) in enumerate(zip(players, strategies)):
             # Check game end before each player's turn
             if is_game_over(player, turn_cap=40):
                 def _all_cards(p):
@@ -407,6 +476,10 @@ def play_game_2p(strategy1: Strategy, strategy2: Strategy, rng_seed: int,
             player.buys = 1
             player.coins = 0
 
-            play_action_phase(player, strategy)
+            # Build opponents list for attack cards
+            opponents = [(players[j], strategies[j])
+                         for j in range(len(players)) if j != i]
+
+            play_action_phase(player, strategy, opponents)
             play_buy_phase(player, strategy)
             cleanup(player)

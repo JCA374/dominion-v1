@@ -19,6 +19,7 @@ from core.engine import (
     apply_action_effects, auto_play_treasures, buy_card, trash_card,
     play_moneylender, cleanup, is_game_over, count_vp,
     play_action_phase, play_buy_phase,
+    militia_discard, _has_moat,
 )
 from play.terminal import discover_models, select_opponent
 from core.strategy import Strategy, load_strategy, big_money_strategy
@@ -266,7 +267,8 @@ class DominionGUI:
 
         supply_before = dict(self.supply)
 
-        play_action_phase(self.ai, self.opponent)
+        opponents = [(self.human, big_money_strategy())]
+        play_action_phase(self.ai, self.opponent, opponents)
         play_buy_phase(self.ai, self.opponent)
 
         # Report what AI did
@@ -337,6 +339,24 @@ class DominionGUI:
             else:
                 self.messages.append("(no treasure to upgrade)")
                 self._auto_advance_action()
+        elif special == "militia":
+            if _has_moat(self.ai):
+                self.messages.append("AI reveals Moat — blocked!")
+            else:
+                before = len(self.ai.hand)
+                militia_discard(self.ai, self.opponent)
+                self.messages.append(f"AI discards {before - len(self.ai.hand)} card(s)")
+            self._auto_advance_action()
+        elif special == "witch":
+            if _has_moat(self.ai):
+                self.messages.append("AI reveals Moat — blocked!")
+            elif self.supply.get("Curse", 0) > 0:
+                self.supply["Curse"] -= 1
+                self.ai.discard.append("Curse")
+                self.messages.append("AI gains a Curse!")
+            else:
+                self.messages.append("(no Curses left)")
+            self._auto_advance_action()
         else:
             self._auto_advance_action()
 
@@ -406,6 +426,24 @@ class DominionGUI:
             else:
                 self.messages.append("(no treasure to upgrade)")
                 self._throne_room_next_play()
+        elif special == "militia":
+            if _has_moat(self.ai):
+                self.messages.append("AI reveals Moat — blocked!")
+            else:
+                before = len(self.ai.hand)
+                militia_discard(self.ai, self.opponent)
+                self.messages.append(f"AI discards {before - len(self.ai.hand)} card(s)")
+            self._throne_room_next_play()
+        elif special == "witch":
+            if _has_moat(self.ai):
+                self.messages.append("AI reveals Moat — blocked!")
+            elif self.supply.get("Curse", 0) > 0:
+                self.supply["Curse"] -= 1
+                self.ai.discard.append("Curse")
+                self.messages.append("AI gains a Curse!")
+            else:
+                self.messages.append("(no Curses left)")
+            self._throne_room_next_play()
         else:
             self._throne_room_next_play()
 

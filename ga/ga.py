@@ -239,6 +239,11 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
         s.duchy_max_coins += rng.choice([-1, 0, 1])
         s.duchy_max_coins = max(5, min(18, s.duchy_max_coins))
 
+    # Jitter militia coin threshold
+    if rng.random() < rate:
+        s.militia_coin_threshold += rng.choice([-1, 0, 1])
+        s.militia_coin_threshold = max(3, min(8, s.militia_coin_threshold))
+
     return s
 
 

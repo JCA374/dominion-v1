@@ -29,10 +29,14 @@
 #define GARDENS     15
 #define MINE        16
 #define MERCHANT    17
+#define CURSE       18
+#define MILITIA     19
+#define WITCH       20
+#define MOAT        21
 
-#define NUM_CARDS   18
-#define PASS_ID     18
-#define STOP_ID     19
+#define NUM_CARDS   22
+#define PASS_ID     22
+#define STOP_ID     23
 
 /* Card types */
 #define TYPE_TREASURE 1
@@ -47,6 +51,9 @@
 #define SPECIAL_GARDENS     4
 #define SPECIAL_MINE        5
 #define SPECIAL_MERCHANT    6
+#define SPECIAL_MILITIA     7
+#define SPECIAL_WITCH       8
+#define SPECIAL_MOAT        9
 
 /* ── Card data arrays (initialized from Python) ── */
 static int card_cost[NUM_CARDS];
@@ -65,22 +72,23 @@ static int card_special[NUM_CARDS];
 #define S_CHAPEL_MAX_TRASH      2
 #define S_PROVINCE_MAX_COINS    3
 #define S_DUCHY_MAX_COINS       4
-#define S_EARLY_BUY             5    /* 20 slots */
-#define S_MID_BUY              25    /* 20 slots */
-#define S_LATE_BUY             45    /* 20 slots */
-#define S_EARLY_NT             65    /* 12 slots */
-#define S_EARLY_T              77    /* 12 slots */
-#define S_MID_NT               89    /* 12 slots */
-#define S_MID_T               101    /* 12 slots */
-#define S_LATE_NT             113    /* 12 slots */
-#define S_LATE_T              125    /* 12 slots */
-#define S_EARLY_CHAPEL        137    /* 6 slots */
-#define S_MID_CHAPEL          143    /* 6 slots */
-#define S_LATE_CHAPEL         149    /* 6 slots */
-#define S_THRONE_ROOM_PRIO    155    /* 12 slots */
-#define S_MINE_TRASH_PRIO     167    /* 4 slots */
-#define S_BUY_TARGETS         171    /* 20 slots: (card_id, max) pairs, -1 terminated */
-#define STRATEGY_SIZE         191
+#define S_MILITIA_COIN_THRESH   5
+#define S_EARLY_BUY             6    /* 20 slots */
+#define S_MID_BUY              26    /* 20 slots */
+#define S_LATE_BUY             46    /* 20 slots */
+#define S_EARLY_NT             66    /* 12 slots */
+#define S_EARLY_T              78    /* 12 slots */
+#define S_MID_NT               90    /* 12 slots */
+#define S_MID_T               102    /* 12 slots */
+#define S_LATE_NT             114    /* 12 slots */
+#define S_LATE_T              126    /* 12 slots */
+#define S_EARLY_CHAPEL        138    /* 6 slots */
+#define S_MID_CHAPEL          144    /* 6 slots */
+#define S_LATE_CHAPEL         150    /* 6 slots */
+#define S_THRONE_ROOM_PRIO    156    /* 12 slots */
+#define S_MINE_TRASH_PRIO     168    /* 4 slots */
+#define S_BUY_TARGETS         172    /* 20 slots: (card_id, max) pairs, -1 terminated */
+#define STRATEGY_SIZE         192
 
 /* ── Limits ── */
 #define MAX_DECK   200
@@ -279,8 +287,104 @@ static void play_chapel(Player *p, const int *strat, int phase) {
     }
 }
 
+/* ── Check if player has Moat in hand ── */
+static int has_moat(const Player *p) {
+    return arr_contains(p->hand, p->hand_n, MOAT);
+}
+
+/* ── Militia discard: opponent discards down to 3 cards ── */
+static void militia_discard(Player *p, const int *opp_strat) {
+    if (p->hand_n <= 3) return;
+
+    int threshold = opp_strat[S_MILITIA_COIN_THRESH];
+
+    /* Count treasure coins in hand */
+    int hand_coins = 0;
+    for (int i = 0; i < p->hand_n; i++) {
+        if (card_type[p->hand[i]] == TYPE_TREASURE)
+            hand_coins += card_coins[p->hand[i]];
+    }
+
+    /* Build discard priority based on threshold.
+     * High money (>= threshold): Curse, Estate, Duchy, actions, Copper, Silver, Gold, Province
+     * Low money (< threshold):   Curse, Copper, Estate, Duchy, Silver, actions, Gold, Province
+     */
+    while (p->hand_n > 3) {
+        int best_idx = -1;
+
+        if (hand_coins >= threshold) {
+            /* High money: discard junk/actions first, keep treasures */
+            /* Priority: Curse > Estate > Duchy > actions > Copper > Silver > Gold > Province */
+            int best_rank = 999;
+            for (int i = 0; i < p->hand_n; i++) {
+                int c = p->hand[i];
+                int rank;
+                if (c == CURSE) rank = 0;
+                else if (c == ESTATE) rank = 1;
+                else if (c == DUCHY) rank = 2;
+                else if (card_type[c] == TYPE_ACTION) rank = 3;
+                else if (c == COPPER) rank = 4;
+                else if (c == SILVER) rank = 5;
+                else if (c == GOLD) rank = 6;
+                else if (c == PROVINCE) rank = 7;
+                else rank = 3; /* unknown cards treated as actions */
+                if (rank < best_rank) {
+                    best_rank = rank;
+                    best_idx = i;
+                }
+            }
+        } else {
+            /* Low money: discard copper/junk first, keep actions */
+            /* Priority: Curse > Copper > Estate > Duchy > Silver > actions > Gold > Province */
+            int best_rank = 999;
+            for (int i = 0; i < p->hand_n; i++) {
+                int c = p->hand[i];
+                int rank;
+                if (c == CURSE) rank = 0;
+                else if (c == COPPER) rank = 1;
+                else if (c == ESTATE) rank = 2;
+                else if (c == DUCHY) rank = 3;
+                else if (c == SILVER) rank = 4;
+                else if (card_type[c] == TYPE_ACTION) rank = 5;
+                else if (c == GOLD) rank = 6;
+                else if (c == PROVINCE) rank = 7;
+                else rank = 5;
+                if (rank < best_rank) {
+                    best_rank = rank;
+                    best_idx = i;
+                }
+            }
+        }
+
+        if (best_idx < 0) break; /* shouldn't happen */
+
+        /* Move card from hand to discard */
+        int card = p->hand[best_idx];
+        for (int j = best_idx; j < p->hand_n - 1; j++)
+            p->hand[j] = p->hand[j + 1];
+        p->hand_n--;
+        p->discard[p->discard_n++] = card;
+    }
+}
+
+/* ── Play Militia attack against opponent ── */
+static void play_militia_attack(Player *opponent, const int *opp_strat) {
+    if (has_moat(opponent)) return;
+    militia_discard(opponent, opp_strat);
+}
+
+/* ── Play Witch attack against opponent ── */
+static void play_witch_attack(Player *opponent, int *supply) {
+    if (has_moat(opponent)) return;
+    if (supply[CURSE] > 0) {
+        supply[CURSE]--;
+        opponent->discard[opponent->discard_n++] = CURSE;
+    }
+}
+
 /* ── Throne Room: double an action ── */
-static void play_throne_room(Player *p, const int *strat, int phase, int *supply) {
+static void play_throne_room(Player *p, const int *strat, int phase, int *supply,
+                             Player *opponent, const int *opp_strat) {
     /* Find highest-priority action in hand */
     const int *prio = strat + S_THRONE_ROOM_PRIO;
     int target = -1;
@@ -307,21 +411,30 @@ static void play_throne_room(Player *p, const int *strat, int phase, int *supply
             play_moneylender(p);
         else if (sp == SPECIAL_MINE)
             play_mine(p, strat, supply);
+        else if (sp == SPECIAL_MILITIA && opponent)
+            play_militia_attack(opponent, opp_strat);
+        else if (sp == SPECIAL_WITCH && opponent)
+            play_witch_attack(opponent, supply);
     }
 }
 
 /* ── Handle special card after resolving action ── */
 static void handle_special(Player *p, int card_id, const int *strat,
-                           int phase, int *supply) {
+                           int phase, int *supply,
+                           Player *opponent, const int *opp_strat) {
     int sp = card_special[card_id];
     if (sp == SPECIAL_CHAPEL)
         play_chapel(p, strat, phase);
     else if (sp == SPECIAL_MONEYLENDER)
         play_moneylender(p);
     else if (sp == SPECIAL_THRONE_ROOM)
-        play_throne_room(p, strat, phase, supply);
+        play_throne_room(p, strat, phase, supply, opponent, opp_strat);
     else if (sp == SPECIAL_MINE)
         play_mine(p, strat, supply);
+    else if (sp == SPECIAL_MILITIA && opponent)
+        play_militia_attack(opponent, opp_strat);
+    else if (sp == SPECIAL_WITCH && opponent)
+        play_witch_attack(opponent, supply);
 }
 
 /* ── Determine phase: 0=early, 1=mid, 2=late ── */
@@ -336,14 +449,15 @@ static int get_phase(int turn, int provinces_remaining, const int *strat) {
 
 /* ── Play action tier (nonterminal or terminal priority list) ── */
 static void play_action_tier(Player *p, const int *strat, const int *prio,
-                             int max_slots, int phase, int *supply) {
+                             int max_slots, int phase, int *supply,
+                             Player *opponent, const int *opp_strat) {
     while (p->actions > 0) {
         int played = 0;
         for (int i = 0; i < max_slots && prio[i] != -1; i++) {
             int c = prio[i];
             if (p->actions > 0 && arr_contains(p->hand, p->hand_n, c)) {
                 resolve_action(p, c);
-                handle_special(p, c, strat, phase, supply);
+                handle_special(p, c, strat, phase, supply, opponent, opp_strat);
                 played = 1;
                 break; /* re-scan from top */
             }
@@ -353,7 +467,8 @@ static void play_action_tier(Player *p, const int *strat, const int *prio,
 }
 
 /* ── Play action phase ── */
-static void play_action_phase(Player *p, const int *strat, int *supply) {
+static void play_action_phase(Player *p, const int *strat, int *supply,
+                              Player *opponent, const int *opp_strat) {
     int phase = get_phase(p->turn, supply[PROVINCE], strat);
 
     const int *nt_prio, *t_prio;
@@ -361,8 +476,8 @@ static void play_action_phase(Player *p, const int *strat, int *supply) {
     else if (phase == 1) { nt_prio = strat + S_MID_NT;   t_prio = strat + S_MID_T; }
     else                 { nt_prio = strat + S_LATE_NT;   t_prio = strat + S_LATE_T; }
 
-    play_action_tier(p, strat, nt_prio, 12, phase, supply);
-    play_action_tier(p, strat, t_prio, 12, phase, supply);
+    play_action_tier(p, strat, nt_prio, 12, phase, supply, opponent, opp_strat);
+    play_action_tier(p, strat, t_prio, 12, phase, supply, opponent, opp_strat);
 }
 
 /* ── Play buy phase ── */
@@ -521,6 +636,7 @@ static int init_supply(int *supply, const int *kingdom_ids, int kingdom_n,
 
     int num_supply = 6; /* base piles: Copper through Province (IDs 0-5) */
 
+    int has_attack = 0;
     for (int i = 0; i < kingdom_n; i++) {
         int cid = kingdom_ids[i];
         if (cid >= 0 && cid < NUM_CARDS) {
@@ -529,7 +645,15 @@ static int init_supply(int *supply, const int *kingdom_ids, int kingdom_n,
             else
                 supply[cid] = 10;
             if (cid >= num_supply) num_supply = cid + 1;
+            if (card_special[cid] == SPECIAL_MILITIA || card_special[cid] == SPECIAL_WITCH)
+                has_attack = 1;
         }
+    }
+
+    /* Add Curse pile if any attack card is in kingdom */
+    if (has_attack) {
+        supply[CURSE] = 10 * (num_players - 1);
+        if (CURSE >= num_supply) num_supply = CURSE + 1;
     }
 
     return num_supply;
@@ -599,7 +723,7 @@ void play_games_batch(
                 }
                 p1.turn = round_num;
                 p1.actions = 1; p1.buys = 1; p1.coins = 0;
-                play_action_phase(&p1, strat1, supply);
+                play_action_phase(&p1, strat1, supply, &p2, strat2);
                 play_buy_phase(&p1, strat1, supply);
                 cleanup(&p1);
 
@@ -609,7 +733,7 @@ void play_games_batch(
                 }
                 p2.turn = round_num;
                 p2.actions = 1; p2.buys = 1; p2.coins = 0;
-                play_action_phase(&p2, strat2, supply);
+                play_action_phase(&p2, strat2, supply, &p1, strat1);
                 play_buy_phase(&p2, strat2, supply);
                 cleanup(&p2);
             }
@@ -644,7 +768,7 @@ void play_games_batch(
                 }
                 p1.turn = round_num;
                 p1.actions = 1; p1.buys = 1; p1.coins = 0;
-                play_action_phase(&p1, strat2, supply);
+                play_action_phase(&p1, strat2, supply, &p2, strat1);
                 play_buy_phase(&p1, strat2, supply);
                 cleanup(&p1);
 
@@ -653,7 +777,7 @@ void play_games_batch(
                 }
                 p2.turn = round_num;
                 p2.actions = 1; p2.buys = 1; p2.coins = 0;
-                play_action_phase(&p2, strat1, supply);
+                play_action_phase(&p2, strat1, supply, &p1, strat2);
                 play_buy_phase(&p2, strat1, supply);
                 cleanup(&p2);
             }

@@ -38,6 +38,7 @@ class Strategy:
     buy_targets: dict[str, int] = field(default_factory=dict)  # card -> max copies to own (empty = no limits)
     province_max_coins: int = 99       # skip Province if coins > this (99 = always buy)
     duchy_max_coins: int = 99          # skip Duchy if coins > this (99 = always buy)
+    militia_coin_threshold: int = 5    # discard heuristic: keep money if coins >= this
 
 
 def get_current_phase(turn: int, provinces_remaining: int,
@@ -178,6 +179,7 @@ def random_strategy(rng: random.Random,
         buy_targets=buy_targets,
         province_max_coins=rng.choice([8, 9, 10, 11, 99]),
         duchy_max_coins=rng.choice([5, 6, 7, 8, 99]),
+        militia_coin_threshold=rng.randint(3, 8),
     )
 
 
@@ -335,6 +337,7 @@ def describe(strategy: Strategy, fitness: float | None = None) -> str:
         lines.append(f"Buy targets: {targets}")
     if strategy.province_max_coins < 99 or strategy.duchy_max_coins < 99:
         lines.append(f"Coin thresholds: Province≤${strategy.province_max_coins}, Duchy≤${strategy.duchy_max_coins}")
+    lines.append(f"Militia discard threshold: ${strategy.militia_coin_threshold}")
     return "\n".join(lines)
 
 
@@ -572,4 +575,5 @@ def load_strategy(path: str) -> Strategy:
         buy_targets=data.get("buy_targets", {}),
         province_max_coins=data.get("province_max_coins", 99),
         duchy_max_coins=data.get("duchy_max_coins", 99),
+        militia_coin_threshold=data.get("militia_coin_threshold", 5),
     )

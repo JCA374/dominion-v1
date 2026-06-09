@@ -18,6 +18,7 @@ from core.engine import (
     is_game_over, count_vp, play_action_phase, play_buy_phase,
     resolve_action, apply_action_effects, auto_play_treasures,
     buy_card, trash_card, play_moneylender, _new_player,
+    play_militia, play_witch, militia_discard, _has_moat,
 )
 from core.strategy import load_strategy, describe, Strategy, big_money_strategy
 
@@ -211,6 +212,26 @@ def _play_single_action(state: GameState, card_name: str) -> None:
         human_throne_room(state)
     elif card.special == "mine":
         human_mine(state)
+    elif card.special == "militia":
+        if hasattr(state, '_opponents') and state._opponents:
+            for opp_state, opp_strat in state._opponents:
+                if _has_moat(opp_state):
+                    print("  Opponent reveals Moat — attack blocked!")
+                else:
+                    before = len(opp_state.hand)
+                    militia_discard(opp_state, opp_strat)
+                    print(f"  Opponent discarded {before - len(opp_state.hand)} card(s)")
+    elif card.special == "witch":
+        if hasattr(state, '_opponents') and state._opponents:
+            for opp_state, opp_strat in state._opponents:
+                if _has_moat(opp_state):
+                    print("  Opponent reveals Moat — attack blocked!")
+                elif state.supply.get("Curse", 0) > 0:
+                    state.supply["Curse"] -= 1
+                    opp_state.discard.append("Curse")
+                    print("  Opponent gains a Curse!")
+                else:
+                    print("  (no Curses left in supply)")
 
     # Show updated hand
     hand = sorted(state.hand, key=lambda c: (ALL_CARDS[c].card_type.value, c))
@@ -315,6 +336,26 @@ def human_throne_room(state: GameState) -> None:
                 print("  (no Copper to trash)")
         elif target_card.special == "mine":
             human_mine(state)
+        elif target_card.special == "militia":
+            if hasattr(state, '_opponents') and state._opponents:
+                for opp_state, opp_strat in state._opponents:
+                    if _has_moat(opp_state):
+                        print("  Opponent reveals Moat — attack blocked!")
+                    else:
+                        before = len(opp_state.hand)
+                        militia_discard(opp_state, opp_strat)
+                        print(f"  Opponent discarded {before - len(opp_state.hand)} card(s)")
+        elif target_card.special == "witch":
+            if hasattr(state, '_opponents') and state._opponents:
+                for opp_state, opp_strat in state._opponents:
+                    if _has_moat(opp_state):
+                        print("  Opponent reveals Moat — attack blocked!")
+                    elif state.supply.get("Curse", 0) > 0:
+                        state.supply["Curse"] -= 1
+                        opp_state.discard.append("Curse")
+                        print("  Opponent gains a Curse!")
+                    else:
+                        print("  (no Curses left in supply)")
 
 
 def human_mine(state: GameState) -> None:
@@ -425,12 +466,13 @@ def human_buy_phase(state: GameState) -> None:
 # AI turn — uses the same engine functions
 # ---------------------------------------------------------------------------
 
-def ai_turn(state: GameState, strategy: Strategy) -> None:
+def ai_turn(state: GameState, strategy: Strategy,
+            opponents: list[tuple[GameState, Strategy]] | None = None) -> None:
     """Execute an AI turn using the standard engine, then report what happened."""
     hand_before = list(state.hand)
     supply_before = dict(state.supply)
 
-    play_action_phase(state, strategy)
+    play_action_phase(state, strategy, opponents)
     play_buy_phase(state, strategy)
 
     # Report what the AI did
@@ -497,8 +539,11 @@ def play_interactive(opponent: Strategy,
 
         show_supply(supply)
         show_state(human, "Your Turn")
+        # Attach opponents for attack card resolution during human turn
+        human._opponents = [(ai, opponent)]
         human_action_phase(human)
         human_buy_phase(human)
+        del human._opponents
         cleanup(human)
 
         # --- AI turn ---
@@ -509,7 +554,7 @@ def play_interactive(opponent: Strategy,
         ai.buys = 1
         ai.coins = 0
 
-        ai_turn(ai, opponent)
+        ai_turn(ai, opponent, opponents=[(human, big_money_strategy())])
 
     # Game over
     human_vp = count_vp(human)

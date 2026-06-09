@@ -46,6 +46,10 @@ MONEYLENDER = Card("Moneylender", CardType.ACTION, cost=4, special="moneylender"
 GARDENS = Card("Gardens", CardType.VICTORY, cost=4, special="gardens")
 MINE = Card("Mine", CardType.ACTION, cost=5, special="mine")
 MERCHANT = Card("Merchant", CardType.ACTION, cost=3, cards_drawn=1, actions=1, special="merchant")
+CURSE = Card("Curse", CardType.VICTORY, cost=0, vp=-1)
+MILITIA = Card("Militia", CardType.ACTION, cost=4, coins=2, special="militia")
+WITCH = Card("Witch", CardType.ACTION, cost=5, cards_drawn=2, special="witch")
+MOAT = Card("Moat", CardType.ACTION, cost=2, cards_drawn=2, special="moat")
 
 ALL_CARDS: dict[str, Card] = {c.name: c for c in [
     COPPER, SILVER, GOLD,
@@ -53,6 +57,7 @@ ALL_CARDS: dict[str, Card] = {c.name: c for c in [
     VILLAGE, SMITHY, MARKET, LABORATORY, FESTIVAL, CHAPEL,
     THRONE_ROOM, COUNCIL_ROOM, MONEYLENDER, GARDENS,
     MINE, MERCHANT,
+    CURSE, MILITIA, WITCH, MOAT,
 ]}
 
 TREASURE_CARDS = ["Copper", "Silver", "Gold"]
@@ -60,12 +65,13 @@ VICTORY_CARDS = ["Estate", "Duchy", "Province"]
 KINGDOM_CARDS = [
     "Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
     "Throne Room", "Council Room", "Moneylender", "Gardens",
-    "Mine", "Merchant",
+    "Mine", "Merchant", "Militia", "Witch", "Moat",
 ]
 ACTION_CARDS = [c for c in KINGDOM_CARDS if ALL_CARDS[c].card_type == CardType.ACTION]
 NONTERMINAL_ACTIONS = [c for c in ACTION_CARDS if ALL_CARDS[c].actions > 0]
 TERMINAL_ACTIONS = [c for c in ACTION_CARDS if ALL_CARDS[c].actions == 0]
 
+ATTACK_CARDS = ["Militia", "Witch"]
 BUYABLE_CARDS = TREASURE_CARDS + VICTORY_CARDS + KINGDOM_CARDS
 
 # --- Integer Card IDs (for C engine) ---
@@ -77,10 +83,11 @@ CARD_ID = {
     "Festival": 10, "Chapel": 11, "Throne Room": 12,
     "Council Room": 13, "Moneylender": 14, "Gardens": 15,
     "Mine": 16, "Merchant": 17,
+    "Curse": 18, "Militia": 19, "Witch": 20, "Moat": 21,
 }
-NUM_CARDS = 18
-PASS_ID = 18
-STOP_ID = 19
+NUM_CARDS = 22
+PASS_ID = 22
+STOP_ID = 23
 CARD_NAME = {v: k for k, v in CARD_ID.items()}
 CARD_NAME[PASS_ID] = "PASS"
 CARD_NAME[STOP_ID] = "STOP"
@@ -93,6 +100,9 @@ SPECIAL_MONEYLENDER = 3
 SPECIAL_GARDENS = 4
 SPECIAL_MINE = 5
 SPECIAL_MERCHANT = 6
+SPECIAL_MILITIA = 7
+SPECIAL_WITCH = 8
+SPECIAL_MOAT = 9
 
 _SPECIAL_MAP = {
     None: SPECIAL_NONE,
@@ -102,6 +112,9 @@ _SPECIAL_MAP = {
     "gardens": SPECIAL_GARDENS,
     "mine": SPECIAL_MINE,
     "merchant": SPECIAL_MERCHANT,
+    "militia": SPECIAL_MILITIA,
+    "witch": SPECIAL_WITCH,
+    "moat": SPECIAL_MOAT,
 }
 
 # Card type codes
