@@ -28,7 +28,7 @@ SEED            = 137
 # Named kingdom presets
 KINGDOM1        = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
                    "Throne Room", "Mine", "Moneylender", "Merchant"]
-KINGDOM2        = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Chapel",
+KINGDOM2        = ["Village", "Smithy", "Market", "Laboratory", "Chapel",
                    "Throne Room", "Mine", "Militia", "Moat", "Witch"]
 # Active kingdom for training
 KINGDOM         = KINGDOM2

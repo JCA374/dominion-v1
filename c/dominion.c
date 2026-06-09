@@ -69,26 +69,31 @@ static int card_special[NUM_CARDS];
 /* Strategy is a flat int array. Priority lists are -1 terminated. */
 #define S_EARLY_TO_MID_TURN     0
 #define S_MID_TO_LATE_PROV      1
-#define S_CHAPEL_MAX_TRASH      2
-#define S_PROVINCE_MAX_COINS    3
-#define S_DUCHY_MAX_COINS       4
-#define S_MILITIA_COIN_THRESH   5
-#define S_EARLY_BUY             6    /* 20 slots */
-#define S_MID_BUY              26    /* 20 slots */
-#define S_LATE_BUY             46    /* 20 slots */
-#define S_EARLY_NT             66    /* 12 slots */
-#define S_EARLY_T              78    /* 12 slots */
-#define S_MID_NT               90    /* 12 slots */
-#define S_MID_T               102    /* 12 slots */
-#define S_LATE_NT             114    /* 12 slots */
-#define S_LATE_T              126    /* 12 slots */
-#define S_EARLY_CHAPEL        138    /* 6 slots */
-#define S_MID_CHAPEL          144    /* 6 slots */
-#define S_LATE_CHAPEL         150    /* 6 slots */
-#define S_THRONE_ROOM_PRIO    156    /* 12 slots */
-#define S_MINE_TRASH_PRIO     168    /* 4 slots */
-#define S_BUY_TARGETS         172    /* 20 slots: (card_id, max) pairs, -1 terminated */
-#define STRATEGY_SIZE         192
+#define S_LATE_TO_END_PROV      2
+#define S_CHAPEL_MAX_TRASH      3
+#define S_PROVINCE_MAX_COINS    4
+#define S_DUCHY_MAX_COINS       5
+#define S_MILITIA_COIN_THRESH   6
+#define S_EARLY_BUY             7    /* 20 slots */
+#define S_MID_BUY              27    /* 20 slots */
+#define S_LATE_BUY             47    /* 20 slots */
+#define S_END_BUY              67    /* 20 slots */
+#define S_EARLY_NT             87    /* 12 slots */
+#define S_EARLY_T              99    /* 12 slots */
+#define S_MID_NT              111    /* 12 slots */
+#define S_MID_T               123    /* 12 slots */
+#define S_LATE_NT             135    /* 12 slots */
+#define S_LATE_T              147    /* 12 slots */
+#define S_END_NT              159    /* 12 slots */
+#define S_END_T               171    /* 12 slots */
+#define S_EARLY_CHAPEL        183    /* 6 slots */
+#define S_MID_CHAPEL          189    /* 6 slots */
+#define S_LATE_CHAPEL         195    /* 6 slots */
+#define S_END_CHAPEL          201    /* 6 slots */
+#define S_THRONE_ROOM_PRIO    207    /* 12 slots */
+#define S_MINE_TRASH_PRIO     219    /* 4 slots */
+#define S_BUY_TARGETS         223    /* 20 slots: (card_id, max) pairs, -1 terminated */
+#define STRATEGY_SIZE         243
 
 /* ── Limits ── */
 #define MAX_DECK   200
@@ -275,7 +280,8 @@ static void play_chapel(Player *p, const int *strat, int phase) {
     const int *prio;
     if (phase == 0)      prio = strat + S_EARLY_CHAPEL;
     else if (phase == 1) prio = strat + S_MID_CHAPEL;
-    else                 prio = strat + S_LATE_CHAPEL;
+    else if (phase == 2) prio = strat + S_LATE_CHAPEL;
+    else                 prio = strat + S_END_CHAPEL;
 
     for (int i = 0; i < 6 && prio[i] != -1; i++) {
         int card_id = prio[i];
@@ -437,14 +443,16 @@ static void handle_special(Player *p, int card_id, const int *strat,
         play_witch_attack(opponent, supply);
 }
 
-/* ── Determine phase: 0=early, 1=mid, 2=late ── */
+/* ── Determine phase: 0=early, 1=mid, 2=late, 3=end ── */
 static int get_phase(int turn, int provinces_remaining, const int *strat) {
     if (turn <= strat[S_EARLY_TO_MID_TURN])
         return 0;
     else if (provinces_remaining > strat[S_MID_TO_LATE_PROV])
         return 1;
-    else
+    else if (provinces_remaining > strat[S_LATE_TO_END_PROV])
         return 2;
+    else
+        return 3;
 }
 
 /* ── Play action tier (nonterminal or terminal priority list) ── */
@@ -474,7 +482,8 @@ static void play_action_phase(Player *p, const int *strat, int *supply,
     const int *nt_prio, *t_prio;
     if (phase == 0)      { nt_prio = strat + S_EARLY_NT; t_prio = strat + S_EARLY_T; }
     else if (phase == 1) { nt_prio = strat + S_MID_NT;   t_prio = strat + S_MID_T; }
-    else                 { nt_prio = strat + S_LATE_NT;   t_prio = strat + S_LATE_T; }
+    else if (phase == 2) { nt_prio = strat + S_LATE_NT;   t_prio = strat + S_LATE_T; }
+    else                 { nt_prio = strat + S_END_NT;    t_prio = strat + S_END_T; }
 
     play_action_tier(p, strat, nt_prio, 12, phase, supply, opponent, opp_strat);
     play_action_tier(p, strat, t_prio, 12, phase, supply, opponent, opp_strat);
@@ -489,7 +498,8 @@ static void play_buy_phase(Player *p, const int *strat, int *supply) {
     const int *buy_prio;
     if (phase == 0)      buy_prio = strat + S_EARLY_BUY;
     else if (phase == 1) buy_prio = strat + S_MID_BUY;
-    else                 buy_prio = strat + S_LATE_BUY;
+    else if (phase == 2) buy_prio = strat + S_LATE_BUY;
+    else                 buy_prio = strat + S_END_BUY;
 
     /* Parse buy targets into a lookup array */
     int buy_target[NUM_CARDS];

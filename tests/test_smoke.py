@@ -89,15 +89,18 @@ def test_single_game_big_money():
 
 def test_phase_selection():
     """Phase selection returns correct phase for edge cases."""
-    t = Transitions(early_to_mid_turn=6, mid_to_late_provinces=4)
+    t = Transitions(early_to_mid_turn=6, mid_to_late_provinces=4, late_to_end_provinces=2)
 
     assert get_current_phase(1, 12, t) == "early"
     assert get_current_phase(6, 12, t) == "early"
     assert get_current_phase(7, 12, t) == "mid"
     assert get_current_phase(7, 5, t) == "mid"
     assert get_current_phase(7, 4, t) == "late"
-    assert get_current_phase(7, 0, t) == "late"
+    assert get_current_phase(7, 3, t) == "late"
+    assert get_current_phase(7, 2, t) == "end"
+    assert get_current_phase(7, 0, t) == "end"
     assert get_current_phase(20, 4, t) == "late"
+    assert get_current_phase(20, 1, t) == "end"
 
 
 def test_nonterminals_play_before_terminals():

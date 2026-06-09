@@ -15,6 +15,7 @@ from core.cards import (BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS, TREASURE_CAR
 class Transitions:
     early_to_mid_turn: int       # range [2, 15]
     mid_to_late_provinces: int   # range [2, 8]
+    late_to_end_provinces: int = 2  # range [1, 4]
 
 
 @dataclass
@@ -22,16 +23,20 @@ class Strategy:
     early_buy_priority: list[str]
     mid_buy_priority: list[str]
     late_buy_priority: list[str]
-    early_nonterminal_priority: list[str]
-    early_terminal_priority: list[str]
-    mid_nonterminal_priority: list[str]
-    mid_terminal_priority: list[str]
-    late_nonterminal_priority: list[str]
-    late_terminal_priority: list[str]
-    early_chapel_trash: list[str]
-    mid_chapel_trash: list[str]
-    late_chapel_trash: list[str]
-    transitions: Transitions
+    end_buy_priority: list[str] = field(default_factory=list)
+    early_nonterminal_priority: list[str] = field(default_factory=list)
+    early_terminal_priority: list[str] = field(default_factory=list)
+    mid_nonterminal_priority: list[str] = field(default_factory=list)
+    mid_terminal_priority: list[str] = field(default_factory=list)
+    late_nonterminal_priority: list[str] = field(default_factory=list)
+    late_terminal_priority: list[str] = field(default_factory=list)
+    end_nonterminal_priority: list[str] = field(default_factory=list)
+    end_terminal_priority: list[str] = field(default_factory=list)
+    early_chapel_trash: list[str] = field(default_factory=list)
+    mid_chapel_trash: list[str] = field(default_factory=list)
+    late_chapel_trash: list[str] = field(default_factory=list)
+    end_chapel_trash: list[str] = field(default_factory=list)
+    transitions: Transitions = field(default_factory=lambda: Transitions(4, 4, 2))
     throne_room_priority: list[str] = field(default_factory=list)  # which action to double (best first)
     mine_trash_priority: list[str] = field(default_factory=list)  # which treasure to upgrade (Copper/Silver)
     chapel_max_trash: int = 4          # 0-4: max cards to trash per Chapel play
@@ -43,13 +48,15 @@ class Strategy:
 
 def get_current_phase(turn: int, provinces_remaining: int,
                       transitions: Transitions) -> str:
-    """Return 'early', 'mid', or 'late' based on turn and province count."""
+    """Return 'early', 'mid', 'late', or 'end' based on turn and province count."""
     if turn <= transitions.early_to_mid_turn:
         return "early"
     elif provinces_remaining > transitions.mid_to_late_provinces:
         return "mid"
-    else:
+    elif provinces_remaining > transitions.late_to_end_provinces:
         return "late"
+    else:
+        return "end"
 
 
 def get_buy_priority(strategy: Strategy, phase: str) -> list[str]:
@@ -58,8 +65,10 @@ def get_buy_priority(strategy: Strategy, phase: str) -> list[str]:
         return strategy.early_buy_priority
     elif phase == "mid":
         return strategy.mid_buy_priority
-    else:
+    elif phase == "late":
         return strategy.late_buy_priority
+    else:
+        return strategy.end_buy_priority
 
 
 def get_action_priorities(strategy: Strategy, phase: str) -> tuple[list[str], list[str]]:
@@ -68,8 +77,10 @@ def get_action_priorities(strategy: Strategy, phase: str) -> tuple[list[str], li
         return strategy.early_nonterminal_priority, strategy.early_terminal_priority
     elif phase == "mid":
         return strategy.mid_nonterminal_priority, strategy.mid_terminal_priority
-    else:
+    elif phase == "late":
         return strategy.late_nonterminal_priority, strategy.late_terminal_priority
+    else:
+        return strategy.end_nonterminal_priority, strategy.end_terminal_priority
 
 
 def get_action_priority(strategy: Strategy, phase: str) -> list[str]:
@@ -84,8 +95,10 @@ def get_chapel_trash_priority(strategy: Strategy, phase: str) -> list[str]:
         return strategy.early_chapel_trash
     elif phase == "mid":
         return strategy.mid_chapel_trash
-    else:
+    elif phase == "late":
         return strategy.late_chapel_trash
+    else:
+        return strategy.end_chapel_trash
 
 
 def _buyable_cards(kingdom: list[str] | None = None) -> list[str]:
@@ -138,10 +151,11 @@ def random_strategy(rng: random.Random,
         cards.insert(pos, "PASS")
         return cards
 
-    # Chapel trash is hardcoded: Estate > Copper > STOP (early/mid), STOP (late)
+    # Chapel trash is hardcoded: Estate > Copper > STOP (early/mid), STOP (late/end)
     early_chapel = ["Estate", "Copper", "STOP"]
     mid_chapel = ["Estate", "Copper", "STOP"]
     late_chapel = ["STOP"]
+    end_chapel = ["STOP"]
 
     # Buy targets: max copies to own per card (action cards 1-5, others uncapped)
     kingdom_cards = kingdom if kingdom is not None else KINGDOM_CARDS
@@ -160,21 +174,26 @@ def random_strategy(rng: random.Random,
         early_buy_priority=random_buy_priority(),
         mid_buy_priority=random_buy_priority(),
         late_buy_priority=random_buy_priority(),
+        end_buy_priority=random_buy_priority(),
         early_nonterminal_priority=shuffled(_nonterminal_actions(kingdom)),
         early_terminal_priority=shuffled(_terminal_actions(kingdom)),
         mid_nonterminal_priority=shuffled(_nonterminal_actions(kingdom)),
         mid_terminal_priority=shuffled(_terminal_actions(kingdom)),
         late_nonterminal_priority=shuffled(_nonterminal_actions(kingdom)),
         late_terminal_priority=shuffled(_terminal_actions(kingdom)),
+        end_nonterminal_priority=shuffled(_nonterminal_actions(kingdom)),
+        end_terminal_priority=shuffled(_terminal_actions(kingdom)),
         early_chapel_trash=early_chapel,
         mid_chapel_trash=mid_chapel,
         late_chapel_trash=late_chapel,
+        end_chapel_trash=end_chapel,
         throne_room_priority=throne_room_priority,
         mine_trash_priority=mine_trash_priority,
         chapel_max_trash=4,
         transitions=Transitions(
             early_to_mid_turn=rng.randint(2, 15),
             mid_to_late_provinces=rng.randint(2, 8),
+            late_to_end_provinces=rng.randint(1, 4),
         ),
         buy_targets=buy_targets,
         province_max_coins=rng.choice([8, 9, 10, 11, 99]),
@@ -220,19 +239,23 @@ def big_money_strategy(kingdom: list[str] | None = None) -> Strategy:
         early_buy_priority=["Gold", "Silver", "PASS"],
         mid_buy_priority=["Province", "Gold", "Silver", "PASS"],
         late_buy_priority=["Province", "Duchy", "Gold", "Estate", "Silver", "PASS"],
+        end_buy_priority=["Province", "Duchy", "Estate", "Gold", "Silver", "PASS"],
         early_nonterminal_priority=nt[:],
         early_terminal_priority=t[:],
         mid_nonterminal_priority=nt[:],
         mid_terminal_priority=t[:],
         late_nonterminal_priority=nt[:],
         late_terminal_priority=t[:],
+        end_nonterminal_priority=nt[:],
+        end_terminal_priority=t[:],
         early_chapel_trash=["STOP"],
         mid_chapel_trash=["STOP"],
         late_chapel_trash=["STOP"],
+        end_chapel_trash=["STOP"],
         throne_room_priority=_default_throne_room_priority(kingdom),
         mine_trash_priority=_default_mine_trash_priority(),
         chapel_max_trash=0,
-        transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
+        transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3, late_to_end_provinces=2),
         buy_targets={},  # no limits — pure Big Money
     )
 
@@ -246,19 +269,23 @@ def gardens_strategy(kingdom: list[str] | None = None) -> Strategy:
         early_buy_priority=_full_buy_priority(["Gardens", "Silver", "Throne Room"], kingdom),
         mid_buy_priority=_full_buy_priority(["Gardens", "Silver", "Throne Room", "Copper", "Estate"], kingdom),
         late_buy_priority=_full_buy_priority(["Province", "Gardens", "Duchy", "Estate", "Copper"], kingdom),
+        end_buy_priority=_full_buy_priority(["Province", "Duchy", "Estate", "Gardens", "Copper"], kingdom),
         early_nonterminal_priority=nt[:],
         early_terminal_priority=t[:],
         mid_nonterminal_priority=nt[:],
         mid_terminal_priority=t[:],
         late_nonterminal_priority=nt[:],
         late_terminal_priority=t[:],
+        end_nonterminal_priority=nt[:],
+        end_terminal_priority=t[:],
         early_chapel_trash=["STOP"],
         mid_chapel_trash=["STOP"],
         late_chapel_trash=["STOP"],
+        end_chapel_trash=["STOP"],
         throne_room_priority=tr_candidates,
         mine_trash_priority=_default_mine_trash_priority(),
         chapel_max_trash=0,
-        transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=2),
+        transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=2, late_to_end_provinces=1),
         buy_targets={"Gardens": 8} if kingdom is None or "Gardens" in kingdom else {},
     )
 
@@ -280,23 +307,29 @@ def engine_strategy(kingdom: list[str] | None = None) -> Strategy:
     early_nt, early_t = _split_priority(early_actions)
     mid_nt, mid_t = _split_priority(mid_actions)
     late_nt, late_t = _split_priority(late_actions)
+    end_actions = _prioritize(["Village", "Laboratory", "Smithy"], actions)
+    end_nt, end_t = _split_priority(end_actions)
     return Strategy(
         early_buy_priority=_full_buy_priority(["Chapel", "Silver", "Village"], kingdom),
         mid_buy_priority=_full_buy_priority(["Gold", "Smithy", "Silver", "Market", "Laboratory"], kingdom),
         late_buy_priority=_full_buy_priority(["Province", "Duchy", "Gold", "Estate"], kingdom),
+        end_buy_priority=_full_buy_priority(["Province", "Duchy", "Estate"], kingdom),
         early_nonterminal_priority=early_nt,
         early_terminal_priority=early_t,
         mid_nonterminal_priority=mid_nt,
         mid_terminal_priority=mid_t,
         late_nonterminal_priority=late_nt,
         late_terminal_priority=late_t,
+        end_nonterminal_priority=end_nt,
+        end_terminal_priority=end_t,
         early_chapel_trash=["Estate", "Copper", "STOP"],
         mid_chapel_trash=["Estate", "STOP", "Copper"],
         late_chapel_trash=["STOP"],
+        end_chapel_trash=["STOP"],
         throne_room_priority=tr_candidates,
         mine_trash_priority=["Copper", "Silver"],
         chapel_max_trash=4,
-        transitions=Transitions(early_to_mid_turn=5, mid_to_late_provinces=4),
+        transitions=Transitions(early_to_mid_turn=5, mid_to_late_provinces=4, late_to_end_provinces=2),
         buy_targets=buy_targets,
     )
 
@@ -317,14 +350,17 @@ def describe(strategy: Strategy, fitness: float | None = None) -> str:
     lines.append(header)
 
     lines.append(f"EARLY (turns 1-{t.early_to_mid_turn}):   {fmt_list(strategy.early_buy_priority)}")
-    lines.append(f"MID   (until {t.mid_to_late_provinces} Prov): {fmt_list(strategy.mid_buy_priority)}")
-    lines.append(f"LATE  (<= {t.mid_to_late_provinces} Prov):   {fmt_list(strategy.late_buy_priority)}")
+    lines.append(f"MID   (>{t.mid_to_late_provinces} Prov):    {fmt_list(strategy.mid_buy_priority)}")
+    lines.append(f"LATE  ({t.late_to_end_provinces+1}-{t.mid_to_late_provinces} Prov): {fmt_list(strategy.late_buy_priority)}")
+    lines.append(f"END   (<={t.late_to_end_provinces} Prov):    {fmt_list(strategy.end_buy_priority)}")
     lines.append(f"Early NonTerm: {fmt_list(strategy.early_nonterminal_priority)}")
     lines.append(f"Early Terminal: {fmt_list(strategy.early_terminal_priority)}")
     lines.append(f"Mid NonTerm:   {fmt_list(strategy.mid_nonterminal_priority)}")
     lines.append(f"Mid Terminal:   {fmt_list(strategy.mid_terminal_priority)}")
     lines.append(f"Late NonTerm:  {fmt_list(strategy.late_nonterminal_priority)}")
     lines.append(f"Late Terminal:  {fmt_list(strategy.late_terminal_priority)}")
+    lines.append(f"End NonTerm:   {fmt_list(strategy.end_nonterminal_priority)}")
+    lines.append(f"End Terminal:   {fmt_list(strategy.end_terminal_priority)}")
     if strategy.throne_room_priority:
         lines.append(f"Throne Room doubles: {fmt_list(strategy.throne_room_priority)}")
     if strategy.mine_trash_priority:
@@ -369,7 +405,9 @@ def summarize(strategy: Strategy, vs_bm: dict) -> str:
     lines.append(f"  Early game: turns 1-{t.early_to_mid_turn}")
     lines.append(f"  Mid game:   turn {t.early_to_mid_turn + 1}+ while "
                  f">{t.mid_to_late_provinces} Provinces remain")
-    lines.append(f"  Late game:  {t.mid_to_late_provinces} or fewer Provinces left")
+    lines.append(f"  Late game:  {t.mid_to_late_provinces} or fewer Provinces left, "
+                 f">{t.late_to_end_provinces} remaining")
+    lines.append(f"  End game:   {t.late_to_end_provinces} or fewer Provinces left")
 
     # --- Per-phase tactic ---
     def top_buys(priority: list[str], n: int = 4) -> list[str]:
@@ -390,7 +428,8 @@ def summarize(strategy: Strategy, vs_bm: dict) -> str:
 
     for phase_name, priority in [("Early", strategy.early_buy_priority),
                                   ("Mid", strategy.mid_buy_priority),
-                                  ("Late", strategy.late_buy_priority)]:
+                                  ("Late", strategy.late_buy_priority),
+                                  ("End", strategy.end_buy_priority)]:
         top = top_buys(priority)
         types = classify_cards(top)
         lines.append("")
@@ -419,7 +458,8 @@ def summarize(strategy: Strategy, vs_bm: dict) -> str:
     lines.append(f"  {'─' * 40}")
     for label, nt_list, t_list in [("Early", strategy.early_nonterminal_priority, strategy.early_terminal_priority),
                                     ("Mid", strategy.mid_nonterminal_priority, strategy.mid_terminal_priority),
-                                    ("Late", strategy.late_nonterminal_priority, strategy.late_terminal_priority)]:
+                                    ("Late", strategy.late_nonterminal_priority, strategy.late_terminal_priority),
+                                    ("End", strategy.end_nonterminal_priority, strategy.end_terminal_priority)]:
         if nt_list:
             lines.append(f"  {label} non-term: {' > '.join(nt_list[:6])}")
         if t_list:
@@ -434,7 +474,8 @@ def summarize(strategy: Strategy, vs_bm: dict) -> str:
     else:
         for label, trash_list in [("Early", strategy.early_chapel_trash),
                                    ("Mid", strategy.mid_chapel_trash),
-                                   ("Late", strategy.late_chapel_trash)]:
+                                   ("Late", strategy.late_chapel_trash),
+                                   ("End", strategy.end_chapel_trash)]:
             stop_idx = (trash_list.index("STOP")
                         if "STOP" in trash_list else None)
             if stop_idx == 0:
@@ -544,6 +585,10 @@ def load_strategy(path: str) -> Strategy:
         mid_nt, mid_t = _split_priority(ap)
         late_nt, late_t = _split_priority(ap)
 
+    # End phase action priorities (backward compat: default to late)
+    end_nt = data.get("end_nonterminal_priority", list(late_nt))
+    end_t = data.get("end_terminal_priority", list(late_t))
+
     # Phase-specific chapel trash (backward compat from single chapel_trash_priority)
     if "early_chapel_trash" in data:
         early_ct = data["early_chapel_trash"]
@@ -554,24 +599,34 @@ def load_strategy(path: str) -> Strategy:
         early_ct = list(ct)
         mid_ct = list(ct)
         late_ct = list(ct)
+    end_ct = data.get("end_chapel_trash", ["STOP"])
+
+    # Transitions backward compat: add late_to_end_provinces default
+    transitions_data = data["transitions"]
+    if "late_to_end_provinces" not in transitions_data:
+        transitions_data = dict(transitions_data, late_to_end_provinces=2)
 
     return Strategy(
         early_buy_priority=data["early_buy_priority"],
         mid_buy_priority=data["mid_buy_priority"],
         late_buy_priority=data["late_buy_priority"],
+        end_buy_priority=data.get("end_buy_priority", list(data["late_buy_priority"])),
         early_nonterminal_priority=early_nt,
         early_terminal_priority=early_t,
         mid_nonterminal_priority=mid_nt,
         mid_terminal_priority=mid_t,
         late_nonterminal_priority=late_nt,
         late_terminal_priority=late_t,
+        end_nonterminal_priority=end_nt,
+        end_terminal_priority=end_t,
         early_chapel_trash=early_ct,
         mid_chapel_trash=mid_ct,
         late_chapel_trash=late_ct,
+        end_chapel_trash=end_ct,
         throne_room_priority=throne_room_priority,
         mine_trash_priority=mine_trash_priority,
         chapel_max_trash=data.get("chapel_max_trash", 4),
-        transitions=Transitions(**data["transitions"]),
+        transitions=Transitions(**transitions_data),
         buy_targets=data.get("buy_targets", {}),
         province_max_coins=data.get("province_max_coins", 99),
         duchy_max_coins=data.get("duchy_max_coins", 99),
