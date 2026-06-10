@@ -37,6 +37,7 @@ HALL_MAX_SIZE   = 6    # Maximum hall of fame opponents
 HALL_ADD_THRESHOLD = 0.55  # Add to hall when win rate exceeds this
 VP_MARGIN_WEIGHT = 0.5  # Blend VP margin into fitness (0=win rate only, 1=margin only)
 SPEED_WEIGHT    = 0.2  # Reward faster wins (25 turns=0, 15 turns=max)
+ENGINE_WEIGHT   = 0.05 # Reward engine-like play (more actions per turn)
 WORKERS         = 8    # Parallel workers for evaluation (1 = sequential)
 
 
@@ -119,6 +120,7 @@ def main():
         "hall_add_threshold": HALL_ADD_THRESHOLD,
         "vp_margin_weight": VP_MARGIN_WEIGHT,
         "speed_weight": SPEED_WEIGHT,
+        "engine_weight": ENGINE_WEIGHT,
         "tier2_count": 15,
         "tier2_seeds": 400,
         "workers": WORKERS,

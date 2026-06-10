@@ -442,11 +442,12 @@ static int get_phase(int turn, int provinces_remaining, const int *strat) {
 }
 
 /* ── Play action phase (single merged priority list) ── */
-static void play_action_phase(Player *p, const int *strat, int *supply,
-                              Player *opponent, const int *opp_strat) {
+static int play_action_phase(Player *p, const int *strat, int *supply,
+                             Player *opponent, const int *opp_strat) {
     int phase = get_phase(p->turn, supply[PROVINCE], strat);
 
     const int *prio = strat + S_ACTION;
+    int actions_played = 0;
 
     while (p->actions > 0) {
         int played = 0;
@@ -455,12 +456,14 @@ static void play_action_phase(Player *p, const int *strat, int *supply,
             if (p->actions > 0 && arr_contains(p->hand, p->hand_n, c)) {
                 resolve_action(p, c);
                 handle_special(p, c, strat, phase, supply, opponent, opp_strat);
+                actions_played++;
                 played = 1;
                 break; /* re-scan from top */
             }
         }
         if (!played) break;
     }
+    return actions_played;
 }
 
 /* ── Play buy phase ── */
@@ -664,7 +667,8 @@ void play_games_batch(
     const int *strat1, const int *strat2,
     const uint64_t *seeds, int num_games,
     const int *kingdom_ids, int kingdom_n,
-    int *out_vp1, int *out_vp2, int *out_turns
+    int *out_vp1, int *out_vp2, int *out_turns,
+    int *out_actions1
 ) {
     for (int g = 0; g < num_games; g++) {
         uint64_t master_rng = seeds[g];
@@ -684,22 +688,17 @@ void play_games_batch(
 
             int round_num = 0;
             int game_over = 0;
+            int total_actions1 = 0;
             while (!game_over) {
                 round_num++;
 
-                /* P1 turn */
+                /* P1 turn (strat1) */
                 if (is_game_over(supply, num_supply, round_num - 1)) {
-                    /* Check with turn = round_num - 1 to match Python:
-                     * Python checks turn_cap=40 against player.turn which
-                     * hasn't been set yet for this round. Actually Python
-                     * checks is_game_over(player, turn_cap=40) before setting
-                     * player.turn. The player.turn is from the PREVIOUS round.
-                     * For round 1, player.turn = 0 (initial). */
                     game_over = 1; break;
                 }
                 p1.turn = round_num;
                 p1.actions = 1; p1.buys = 1; p1.coins = 0;
-                play_action_phase(&p1, strat1, supply, &p2, strat2);
+                total_actions1 += play_action_phase(&p1, strat1, supply, &p2, strat2);
                 play_buy_phase(&p1, strat1, supply);
                 cleanup(&p1);
 
@@ -718,6 +717,7 @@ void play_games_batch(
             out_vp1[idx] = count_vp(&p1);
             out_vp2[idx] = count_vp(&p2);
             out_turns[idx] = round_num - 1;
+            out_actions1[idx] = total_actions1;
         }
 
         /* ── Game 2: strat2 as P1, strat1 as P2 (swap seats) ── */
@@ -736,6 +736,7 @@ void play_games_batch(
 
             int round_num = 0;
             int game_over = 0;
+            int total_actions1 = 0;
             while (!game_over) {
                 round_num++;
 
@@ -753,7 +754,7 @@ void play_games_batch(
                 }
                 p2.turn = round_num;
                 p2.actions = 1; p2.buys = 1; p2.coins = 0;
-                play_action_phase(&p2, strat1, supply, &p1, strat2);
+                total_actions1 += play_action_phase(&p2, strat1, supply, &p1, strat2);
                 play_buy_phase(&p2, strat1, supply);
                 cleanup(&p2);
             }
@@ -763,6 +764,7 @@ void play_games_batch(
             out_vp1[idx] = count_vp(&p2);  /* strat1's VP (was P2) */
             out_vp2[idx] = count_vp(&p1);  /* strat2's VP (was P1) */
             out_turns[idx] = round_num - 1;
+            out_actions1[idx] = total_actions1;
         }
     }
 }

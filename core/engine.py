@@ -171,22 +171,25 @@ def _handle_special(state: GameState, card_name: str, strategy: Strategy,
 
 
 def play_action_phase(state: GameState, strategy: Strategy,
-                      opponents: list[tuple[GameState, Strategy]] | None = None) -> None:
-    """Play action cards following a single priority list."""
+                      opponents: list[tuple[GameState, Strategy]] | None = None) -> int:
+    """Play action cards following a single priority list. Returns count of actions played."""
     from core.strategy import get_current_phase, get_action_priority
     phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
     priority = get_action_priority(strategy, phase)
 
+    actions_played = 0
     while state.actions > 0:
         played = False
         for card_name in priority:
             if card_name in state.hand and state.actions > 0:
                 resolve_action(state, card_name)
                 _handle_special(state, card_name, strategy, phase, opponents)
+                actions_played += 1
                 played = True
                 break  # re-scan from top of priority list
         if not played:
             break
+    return actions_played
 
 
 def play_moneylender(state: GameState) -> bool:
@@ -464,6 +467,7 @@ def play_game_2p(strategy1: Strategy, strategy2: Strategy, rng_seed: int,
 
     strategies = [strategy1, strategy2]
     players = [p1, p2]
+    total_actions = [0, 0]
     round_num = 0
 
     while True:
@@ -479,6 +483,8 @@ def play_game_2p(strategy1: Strategy, strategy2: Strategy, rng_seed: int,
                     "turns": round_num - 1,
                     "deck1": _all_cards(p1),
                     "deck2": _all_cards(p2),
+                    "actions1": total_actions[0],
+                    "actions2": total_actions[1],
                 }
 
             player.turn = round_num  # per-player turn (for phase transitions)
@@ -490,6 +496,6 @@ def play_game_2p(strategy1: Strategy, strategy2: Strategy, rng_seed: int,
             opponents = [(players[j], strategies[j])
                          for j in range(len(players)) if j != i]
 
-            play_action_phase(player, strategy, opponents)
+            total_actions[i] += play_action_phase(player, strategy, opponents)
             play_buy_phase(player, strategy)
             cleanup(player)

@@ -279,6 +279,7 @@ def run_ga(config: dict) -> dict:
     hall_max_size = config.get("hall_max_size", 6)
     hall_add_threshold = config.get("hall_add_threshold", 0.55)
     vp_margin_weight = config.get("vp_margin_weight", 0.0)
+    engine_weight = config.get("engine_weight", 0.0)
 
     tier2_count = min(config.get("tier2_count", 15), pop_size)  # top N re-evaluated in tier 2
     tier2_seeds = config.get("tier2_seeds", 400)      # seeds for tier 2 (× 2 = 800 games)
@@ -328,18 +329,20 @@ def run_ga(config: dict) -> dict:
             eval_results = evaluate_population_vs_hall(
                 population, seed_list, kingdom, hall=hall, workers=workers)
 
-            # Blended fitness: win rate + VP margin + speed bonus
+            # Blended fitness: win rate + VP margin + speed bonus + engine bonus
             speed_weight = config.get("speed_weight", 0.0)
             def _blended(r):
-                f = r["win_rate"]
+                remaining = 1.0 - vp_margin_weight - speed_weight - engine_weight
+                f = remaining * r["win_rate"]
                 if vp_margin_weight > 0:
                     margin_norm = max(0.0, min(1.0, (r["mean_vp_margin"] + 20) / 40))
-                    f = (1 - vp_margin_weight - speed_weight) * r["win_rate"] + vp_margin_weight * margin_norm
-                else:
-                    f = (1 - speed_weight) * r["win_rate"]
+                    f += vp_margin_weight * margin_norm
                 if speed_weight > 0:
                     speed_norm = max(0.0, min(1.0, (25 - r["mean_turns"]) / 10))
                     f += speed_weight * speed_norm
+                if engine_weight > 0:
+                    engine_norm = max(0.0, min(1.0, (r["mean_actions_per_turn"] - 0.5) / 2.5))
+                    f += engine_weight * engine_norm
                 return f
             fitnesses = [_blended(r) for r in eval_results]
 

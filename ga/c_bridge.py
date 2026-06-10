@@ -55,6 +55,7 @@ _lib.play_games_batch.argtypes = [
     ctypes.POINTER(ctypes.c_int),      # out_vp1
     ctypes.POINTER(ctypes.c_int),      # out_vp2
     ctypes.POINTER(ctypes.c_int),      # out_turns
+    ctypes.POINTER(ctypes.c_int),      # out_actions1
 ]
 _lib.play_games_batch.restype = None
 
@@ -172,26 +173,31 @@ def evaluate_vs_opponent_c(strategy: Strategy, seed_list: list[int],
     out_vp1 = (ctypes.c_int * n_results)()
     out_vp2 = (ctypes.c_int * n_results)()
     out_turns = (ctypes.c_int * n_results)()
+    out_actions1 = (ctypes.c_int * n_results)()
 
     _lib.play_games_batch(strat1, strat2, seeds_arr, num_seeds,
                           kingdom_arr, kingdom_n,
-                          out_vp1, out_vp2, out_turns)
+                          out_vp1, out_vp2, out_turns, out_actions1)
 
     # Aggregate results
     wins = 0
     ties = 0
     total_turns = 0
     total_vp_margin = 0
+    total_actions1 = 0
 
     for i in range(n_results):
         vp1 = out_vp1[i]
         vp2 = out_vp2[i]
         total_turns += out_turns[i]
         total_vp_margin += vp1 - vp2
+        total_actions1 += out_actions1[i]
         if vp1 > vp2:
             wins += 1
         elif vp1 == vp2:
             ties += 1
+
+    mean_actions_per_turn = total_actions1 / total_turns if total_turns > 0 else 0.0
 
     return {
         "win_rate": wins / n_results,
@@ -199,5 +205,6 @@ def evaluate_vs_opponent_c(strategy: Strategy, seed_list: list[int],
         "loss_rate": (n_results - wins - ties) / n_results,
         "mean_turns": total_turns / n_results,
         "mean_vp_margin": total_vp_margin / n_results,
+        "mean_actions_per_turn": mean_actions_per_turn,
         "avg_final_deck": None,
     }
