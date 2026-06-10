@@ -76,7 +76,6 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
         strategy.early_buy_priority,
         strategy.mid_buy_priority,
         strategy.late_buy_priority,
-        strategy.end_buy_priority,
     ]
 
     # Derive card list from the strategy's actual priorities (preserves kingdom selection)
@@ -93,8 +92,8 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
     non_pass.sort(key=lambda c: ALL_CARDS[c].cost, reverse=True)
     cards = non_pass + (["PASS"] if "PASS" in seen else [])
 
-    data = np.full((len(cards), 4), np.nan)
-    after_pass = np.zeros((len(cards), 4), dtype=bool)
+    data = np.full((len(cards), 3), np.nan)
+    after_pass = np.zeros((len(cards), 3), dtype=bool)
 
     for col, priority_list in enumerate(lists):
         past_pass = False
@@ -120,18 +119,17 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
 
     # Draw grey background for after-PASS cells
     for i in range(len(cards)):
-        for j in range(4):
+        for j in range(3):
             if after_pass[i, j]:
                 ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1,
                                            facecolor="#e0e0e0", edgecolor="none"))
 
-    ax.set_xticks(range(4))
+    ax.set_xticks(range(3))
     t = strategy.transitions
     ax.set_xticklabels([
         f"Early\n(turns 1–{t.early_to_mid_turn - 1})",
         f"Mid\n(turn {t.early_to_mid_turn}+,\n>{t.mid_to_late_provinces} prov\nor turn <{t.mid_to_late_turn})",
-        f"Late\n(≤{t.mid_to_late_provinces},\n>{t.late_to_end_provinces} prov left)",
-        f"End\n(≤{t.late_to_end_provinces} prov left)",
+        f"Late\n(≤{t.mid_to_late_provinces} prov\nor turn {t.mid_to_late_turn}+\nuntil game end)",
     ])
 
     # Left y-axis: card name (cost)
@@ -156,7 +154,7 @@ def plot_buy_heatmap(strategy: Strategy, filename: str = "buy_heatmap.png") -> N
 
     # Annotate cells with rank
     for i in range(len(cards)):
-        for j in range(4):
+        for j in range(3):
             if not np.isnan(data[i, j]):
                 if after_pass[i, j]:
                     ax.text(j, i, f"{int(data[i, j])}", ha="center", va="center",

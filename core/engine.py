@@ -170,10 +170,13 @@ def _handle_special(state: GameState, card_name: str, strategy: Strategy,
         play_witch(state, opponents)
 
 
-def _play_action_tier(state: GameState, strategy: Strategy,
-                      priority: list[str], phase: str,
+def play_action_phase(state: GameState, strategy: Strategy,
                       opponents: list[tuple[GameState, Strategy]] | None = None) -> None:
-    """Play actions from a single tier (nonterminal or terminal)."""
+    """Play action cards following a single priority list."""
+    from core.strategy import get_current_phase, get_action_priority
+    phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
+    priority = get_action_priority(strategy, phase)
+
     while state.actions > 0:
         played = False
         for card_name in priority:
@@ -184,17 +187,6 @@ def _play_action_tier(state: GameState, strategy: Strategy,
                 break  # re-scan from top of priority list
         if not played:
             break
-
-
-def play_action_phase(state: GameState, strategy: Strategy,
-                      opponents: list[tuple[GameState, Strategy]] | None = None) -> None:
-    """Play action cards: all non-terminals first, then terminals."""
-    from core.strategy import get_current_phase, get_action_priorities
-    phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
-    nt_priority, t_priority = get_action_priorities(strategy, phase)
-
-    _play_action_tier(state, strategy, nt_priority, phase, opponents)
-    _play_action_tier(state, strategy, t_priority, phase, opponents)
 
 
 def play_moneylender(state: GameState) -> bool:
@@ -240,7 +232,7 @@ def militia_discard(state: GameState, strategy: Strategy) -> None:
     Uses the evolved action priority lists to decide which actions are least
     valuable (discard low-priority actions first).
     """
-    from core.strategy import get_current_phase, get_action_priorities
+    from core.strategy import get_current_phase, get_action_priority
 
     if len(state.hand) <= 3:
         return
@@ -251,9 +243,7 @@ def militia_discard(state: GameState, strategy: Strategy) -> None:
     # Get action priority for current phase (most valuable first)
     phase = get_current_phase(state.turn, state.supply.get("Province", 0),
                               strategy.transitions)
-    nt_prio, t_prio = get_action_priorities(strategy, phase)
-    # Combined: nonterminals are generally more valuable than terminals
-    action_priority = list(nt_prio) + list(t_prio)
+    action_priority = get_action_priority(strategy, phase)
 
     # Rank actions in hand: lower index = more valuable = discard last
     # Actions not in priority list get discarded first

@@ -29,7 +29,7 @@ from core.engine import (
 )
 from core.strategy import (
     Strategy, load_strategy, big_money_strategy,
-    get_current_phase, get_buy_priority, get_action_priority, get_action_priorities,
+    get_current_phase, get_buy_priority, get_action_priority,
     get_chapel_trash_priority,
 )
 
@@ -198,12 +198,11 @@ def _traced_action_tier(state: GameState, strategy: Strategy,
 
 def traced_action_phase(state: GameState, strategy: Strategy,
                         opponents: list[tuple[GameState, Strategy]] | None = None) -> list[str]:
-    """Play action phase: non-terminals first, then terminals."""
+    """Play action phase following a single priority list."""
     phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
-    nt_priority, t_priority = get_action_priorities(strategy, phase)
+    priority = get_action_priority(strategy, phase)
     lines = []
-    lines.extend(_traced_action_tier(state, strategy, nt_priority, phase, opponents))
-    lines.extend(_traced_action_tier(state, strategy, t_priority, phase, opponents))
+    lines.extend(_traced_action_tier(state, strategy, priority, phase, opponents))
     return lines
 
 

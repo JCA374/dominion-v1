@@ -130,19 +130,10 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
         early_buy_priority=order_crossover(p1.early_buy_priority, p2.early_buy_priority, rng),
         mid_buy_priority=order_crossover(p1.mid_buy_priority, p2.mid_buy_priority, rng),
         late_buy_priority=order_crossover(p1.late_buy_priority, p2.late_buy_priority, rng),
-        early_nonterminal_priority=order_crossover(p1.early_nonterminal_priority, p2.early_nonterminal_priority, rng),
-        early_terminal_priority=order_crossover(p1.early_terminal_priority, p2.early_terminal_priority, rng),
-        mid_nonterminal_priority=order_crossover(p1.mid_nonterminal_priority, p2.mid_nonterminal_priority, rng),
-        mid_terminal_priority=order_crossover(p1.mid_terminal_priority, p2.mid_terminal_priority, rng),
-        late_nonterminal_priority=order_crossover(p1.late_nonterminal_priority, p2.late_nonterminal_priority, rng),
-        late_terminal_priority=order_crossover(p1.late_terminal_priority, p2.late_terminal_priority, rng),
-        end_buy_priority=order_crossover(p1.end_buy_priority, p2.end_buy_priority, rng),
-        end_nonterminal_priority=order_crossover(p1.end_nonterminal_priority, p2.end_nonterminal_priority, rng),
-        end_terminal_priority=order_crossover(p1.end_terminal_priority, p2.end_terminal_priority, rng),
+        action_priority=order_crossover(p1.action_priority, p2.action_priority, rng),
         early_chapel_trash=_crossover_chapel(p1.early_chapel_trash, p2.early_chapel_trash, rng),
         mid_chapel_trash=_crossover_chapel(p1.mid_chapel_trash, p2.mid_chapel_trash, rng),
         late_chapel_trash=_crossover_chapel(p1.late_chapel_trash, p2.late_chapel_trash, rng),
-        end_chapel_trash=_crossover_chapel(p1.end_chapel_trash, p2.end_chapel_trash, rng),
         throne_room_priority=order_crossover(
             p1.throne_room_priority, p2.throne_room_priority, rng
         ),
@@ -162,10 +153,6 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
             mid_to_late_turn=rng.choice([
                 p1.transitions.mid_to_late_turn,
                 p2.transitions.mid_to_late_turn,
-            ]),
-            late_to_end_provinces=rng.choice([
-                p1.transitions.late_to_end_provinces,
-                p2.transitions.late_to_end_provinces,
             ]),
         ),
         buy_targets=_crossover_targets(p1.buy_targets, p2.buy_targets, rng),
@@ -213,15 +200,7 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
     s.early_buy_priority = _mutate_list(s.early_buy_priority, rate, rng)
     s.mid_buy_priority = _mutate_list(s.mid_buy_priority, rate, rng)
     s.late_buy_priority = _mutate_list(s.late_buy_priority, rate, rng)
-    s.early_nonterminal_priority = _mutate_list(s.early_nonterminal_priority, rate, rng, allow_pass=False)
-    s.early_terminal_priority = _mutate_list(s.early_terminal_priority, rate, rng, allow_pass=False)
-    s.mid_nonterminal_priority = _mutate_list(s.mid_nonterminal_priority, rate, rng, allow_pass=False)
-    s.mid_terminal_priority = _mutate_list(s.mid_terminal_priority, rate, rng, allow_pass=False)
-    s.late_nonterminal_priority = _mutate_list(s.late_nonterminal_priority, rate, rng, allow_pass=False)
-    s.late_terminal_priority = _mutate_list(s.late_terminal_priority, rate, rng, allow_pass=False)
-    s.end_buy_priority = _mutate_list(s.end_buy_priority, rate, rng)
-    s.end_nonterminal_priority = _mutate_list(s.end_nonterminal_priority, rate, rng, allow_pass=False)
-    s.end_terminal_priority = _mutate_list(s.end_terminal_priority, rate, rng, allow_pass=False)
+    s.action_priority = _mutate_list(s.action_priority, rate, rng, allow_pass=False)
     # Chapel trash: Curse always first, STOP always last, middle cards evolvable
     def _mutate_chapel(trash_list):
         middle = [c for c in trash_list if c not in ("Curse", "STOP")]
@@ -232,7 +211,6 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
     s.early_chapel_trash = _mutate_chapel(s.early_chapel_trash)
     s.mid_chapel_trash = _mutate_chapel(s.mid_chapel_trash)
     s.late_chapel_trash = _mutate_chapel(s.late_chapel_trash)
-    s.end_chapel_trash = _mutate_chapel(s.end_chapel_trash)
     s.chapel_max_trash = 4
     s.throne_room_priority = _mutate_list(s.throne_room_priority, rate, rng, allow_pass=False)
     s.mine_trash_priority = _mutate_list(s.mine_trash_priority, rate, rng, allow_pass=False)
@@ -252,11 +230,6 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
         delta = rng.choice([-3, -2, -1, -1, 0, 1, 1, 2, 3])
         s.transitions.mid_to_late_turn += delta
         s.transitions.mid_to_late_turn = max(5, min(30, s.transitions.mid_to_late_turn))
-
-    if rng.random() < rate:
-        delta = rng.choice([-1, 0, 1])
-        s.transitions.late_to_end_provinces += delta
-        s.transitions.late_to_end_provinces = max(1, min(4, s.transitions.late_to_end_provinces))
 
     # Jitter buy targets (min 1 so every card remains purchasable)
     for card in list(s.buy_targets):

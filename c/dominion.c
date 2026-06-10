@@ -70,31 +70,21 @@ static int card_special[NUM_CARDS];
 #define S_EARLY_TO_MID_TURN     0
 #define S_MID_TO_LATE_PROV      1
 #define S_MID_TO_LATE_TURN      2
-#define S_LATE_TO_END_PROV      3
-#define S_CHAPEL_MAX_TRASH      4
-#define S_PROVINCE_MAX_COINS    5
-#define S_DUCHY_MAX_COINS       6
-#define S_MILITIA_COIN_THRESH   7
-#define S_EARLY_BUY             8    /* 20 slots */
-#define S_MID_BUY              28    /* 20 slots */
-#define S_LATE_BUY             48    /* 20 slots */
-#define S_END_BUY              68    /* 20 slots */
-#define S_EARLY_NT             88    /* 12 slots */
-#define S_EARLY_T             100    /* 12 slots */
-#define S_MID_NT              112    /* 12 slots */
-#define S_MID_T               124    /* 12 slots */
-#define S_LATE_NT             136    /* 12 slots */
-#define S_LATE_T              148    /* 12 slots */
-#define S_END_NT              160    /* 12 slots */
-#define S_END_T               172    /* 12 slots */
-#define S_EARLY_CHAPEL        184    /* 6 slots */
-#define S_MID_CHAPEL          190    /* 6 slots */
-#define S_LATE_CHAPEL         196    /* 6 slots */
-#define S_END_CHAPEL          202    /* 6 slots */
-#define S_THRONE_ROOM_PRIO    208    /* 12 slots */
-#define S_MINE_TRASH_PRIO     220    /* 4 slots */
-#define S_BUY_TARGETS         224    /* 20 slots: (card_id, max) pairs, -1 terminated */
-#define STRATEGY_SIZE         244
+#define S_CHAPEL_MAX_TRASH      3
+#define S_PROVINCE_MAX_COINS    4
+#define S_DUCHY_MAX_COINS       5
+#define S_MILITIA_COIN_THRESH   6
+#define S_EARLY_BUY             7    /* 20 slots */
+#define S_MID_BUY              27    /* 20 slots */
+#define S_LATE_BUY             47    /* 20 slots */
+#define S_ACTION               67    /* 16 slots (single, shared) */
+#define S_EARLY_CHAPEL         83    /* 6 slots */
+#define S_MID_CHAPEL           89    /* 6 slots */
+#define S_LATE_CHAPEL          95    /* 6 slots */
+#define S_THRONE_ROOM_PRIO    101    /* 12 slots */
+#define S_MINE_TRASH_PRIO     113    /* 4 slots */
+#define S_BUY_TARGETS         117    /* 20 slots: (card_id, max) pairs, -1 terminated */
+#define STRATEGY_SIZE         137
 
 /* ── Limits ── */
 #define MAX_DECK   200
@@ -281,8 +271,7 @@ static void play_chapel(Player *p, const int *strat, int phase) {
     const int *prio;
     if (phase == 0)      prio = strat + S_EARLY_CHAPEL;
     else if (phase == 1) prio = strat + S_MID_CHAPEL;
-    else if (phase == 2) prio = strat + S_LATE_CHAPEL;
-    else                 prio = strat + S_END_CHAPEL;
+    else                 prio = strat + S_LATE_CHAPEL;
 
     for (int i = 0; i < 6 && prio[i] != -1; i++) {
         int card_id = prio[i];
@@ -304,26 +293,13 @@ static int get_phase(int turn, int provinces_remaining, const int *strat);
 
 /* ── Rank an action card for militia discard using evolved action priority ──
  * Lower rank = discard first (least valuable).
- * Checks both nonterminal and terminal lists for the opponent's phase.
- * Nonterminals are ranked higher (kept longer) than terminals.
+ * Higher position in the priority list = more valuable = higher keep rank.
  */
-static int action_keep_rank(int card_id, const int *opp_strat, int opp_phase) {
-    /* Pick the right priority lists for the opponent's phase */
-    const int *nt_prio, *t_prio;
-    if (opp_phase == 0)      { nt_prio = opp_strat + S_EARLY_NT; t_prio = opp_strat + S_EARLY_T; }
-    else if (opp_phase == 1) { nt_prio = opp_strat + S_MID_NT;   t_prio = opp_strat + S_MID_T; }
-    else if (opp_phase == 2) { nt_prio = opp_strat + S_LATE_NT;   t_prio = opp_strat + S_LATE_T; }
-    else                     { nt_prio = opp_strat + S_END_NT;    t_prio = opp_strat + S_END_T; }
-
-    /* Nonterminals: higher base rank (more valuable to keep) */
-    for (int i = 0; i < 12 && nt_prio[i] != -1; i++) {
-        if (nt_prio[i] == card_id)
-            return 200 + (12 - i);  /* top NT = 212, lowest = 201 */
-    }
-    /* Terminals: lower base rank */
-    for (int i = 0; i < 12 && t_prio[i] != -1; i++) {
-        if (t_prio[i] == card_id)
-            return 100 + (12 - i);  /* top T = 112, lowest = 101 */
+static int action_keep_rank(int card_id, const int *opp_strat) {
+    const int *prio = opp_strat + S_ACTION;
+    for (int i = 0; i < 16 && prio[i] != -1; i++) {
+        if (prio[i] == card_id)
+            return 100 + (16 - i);  /* top = 116, lowest = 101 */
     }
     return 0;  /* unknown action: discard first */
 }
@@ -333,7 +309,6 @@ static void militia_discard(Player *p, const int *opp_strat, const int *supply) 
     if (p->hand_n <= 3) return;
 
     int threshold = opp_strat[S_MILITIA_COIN_THRESH];
-    int opp_phase = get_phase(p->turn, supply[PROVINCE], opp_strat);
 
     /* Count treasure coins in hand */
     int hand_coins = 0;
@@ -359,7 +334,7 @@ static void militia_discard(Player *p, const int *opp_strat, const int *supply) 
                 rank = 0;
             } else if (card_type[c] == TYPE_ACTION) {
                 /* Use evolved priority: lower keep_rank = less valuable = discard sooner */
-                int keep = action_keep_rank(c, opp_strat, opp_phase);
+                int keep = action_keep_rank(c, opp_strat);
                 if (hand_coins >= threshold) {
                     /* High money: actions discarded after junk VP, before treasures */
                     /* keep 0..212 mapped to rank 30..300 (inverted: low keep = low rank = discard first) */
@@ -475,26 +450,27 @@ static void handle_special(Player *p, int card_id, const int *strat,
         play_witch_attack(opponent, supply);
 }
 
-/* ── Determine phase: 0=early, 1=mid, 2=late, 3=end ── */
+/* ── Determine phase: 0=early, 1=mid, 2=late ── */
 static int get_phase(int turn, int provinces_remaining, const int *strat) {
     if (turn <= strat[S_EARLY_TO_MID_TURN])
         return 0;
     else if (provinces_remaining > strat[S_MID_TO_LATE_PROV]
              && turn < strat[S_MID_TO_LATE_TURN])
         return 1;
-    else if (provinces_remaining > strat[S_LATE_TO_END_PROV])
-        return 2;
     else
-        return 3;
+        return 2;
 }
 
-/* ── Play action tier (nonterminal or terminal priority list) ── */
-static void play_action_tier(Player *p, const int *strat, const int *prio,
-                             int max_slots, int phase, int *supply,
-                             Player *opponent, const int *opp_strat) {
+/* ── Play action phase (single merged priority list) ── */
+static void play_action_phase(Player *p, const int *strat, int *supply,
+                              Player *opponent, const int *opp_strat) {
+    int phase = get_phase(p->turn, supply[PROVINCE], strat);
+
+    const int *prio = strat + S_ACTION;
+
     while (p->actions > 0) {
         int played = 0;
-        for (int i = 0; i < max_slots && prio[i] != -1; i++) {
+        for (int i = 0; i < 16 && prio[i] != -1; i++) {
             int c = prio[i];
             if (p->actions > 0 && arr_contains(p->hand, p->hand_n, c)) {
                 resolve_action(p, c);
@@ -507,21 +483,6 @@ static void play_action_tier(Player *p, const int *strat, const int *prio,
     }
 }
 
-/* ── Play action phase ── */
-static void play_action_phase(Player *p, const int *strat, int *supply,
-                              Player *opponent, const int *opp_strat) {
-    int phase = get_phase(p->turn, supply[PROVINCE], strat);
-
-    const int *nt_prio, *t_prio;
-    if (phase == 0)      { nt_prio = strat + S_EARLY_NT; t_prio = strat + S_EARLY_T; }
-    else if (phase == 1) { nt_prio = strat + S_MID_NT;   t_prio = strat + S_MID_T; }
-    else if (phase == 2) { nt_prio = strat + S_LATE_NT;   t_prio = strat + S_LATE_T; }
-    else                 { nt_prio = strat + S_END_NT;    t_prio = strat + S_END_T; }
-
-    play_action_tier(p, strat, nt_prio, 12, phase, supply, opponent, opp_strat);
-    play_action_tier(p, strat, t_prio, 12, phase, supply, opponent, opp_strat);
-}
-
 /* ── Play buy phase ── */
 static void play_buy_phase(Player *p, const int *strat, int *supply) {
     auto_play_treasures(p);
@@ -531,8 +492,7 @@ static void play_buy_phase(Player *p, const int *strat, int *supply) {
     const int *buy_prio;
     if (phase == 0)      buy_prio = strat + S_EARLY_BUY;
     else if (phase == 1) buy_prio = strat + S_MID_BUY;
-    else if (phase == 2) buy_prio = strat + S_LATE_BUY;
-    else                 buy_prio = strat + S_END_BUY;
+    else                 buy_prio = strat + S_LATE_BUY;
 
     /* Parse buy targets into a lookup array */
     int buy_target[NUM_CARDS];
