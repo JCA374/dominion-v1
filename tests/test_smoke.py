@@ -1575,66 +1575,6 @@ def test_hall_of_fame_prevents_bm_drift():
 
 
 
-def test_province_max_coins_skips_buy():
-    """Province is skipped when coins exceed province_max_coins threshold."""
-    state = _make_state_with_hand(["Gold", "Gold", "Silver"])  # 8 coins
-    state.supply = _full_supply()
-    state.turn = 10
-    state.buys = 1
-    # Province costs 8, we have 8 coins, but threshold says skip if > 8... 8 is not > 8
-    strategy = _make_strategy(
-        mid_buy_priority=["Province", "Gold", "Silver", "PASS"],
-        transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
-        province_max_coins=8,  # buy Province at exactly 8
-    )
-    play_buy_phase(state, strategy)
-    assert "Province" in state.discard  # 8 coins, threshold 8, should buy
-
-    # Now test with 11 coins (Gold + Gold + Gold + Silver via extra card)
-    state2 = _make_state_with_hand(["Gold", "Gold", "Gold"])  # 9 coins
-    state2.supply = _full_supply()
-    state2.turn = 10
-    state2.buys = 1
-    strategy2 = _make_strategy(
-        mid_buy_priority=["Province", "Gold", "Silver", "PASS"],
-        transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
-        province_max_coins=8,  # only buy at 8
-    )
-    play_buy_phase(state2, strategy2)
-    # 9 coins > 8 threshold, Province should be skipped, buy Gold instead
-    assert "Province" not in state2.discard
-    assert "Gold" in state2.discard
-
-
-def test_duchy_max_coins_skips_buy():
-    """Duchy is skipped when coins exceed duchy_max_coins threshold."""
-    state = _make_state_with_hand(["Silver", "Silver", "Copper"])  # 5 coins
-    state.supply = _full_supply()
-    state.turn = 10
-    state.buys = 1
-    strategy = _make_strategy(
-        mid_buy_priority=["Duchy", "Silver", "PASS"],
-        transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
-        duchy_max_coins=5,  # buy Duchy at exactly 5
-    )
-    play_buy_phase(state, strategy)
-    assert "Duchy" in state.discard  # 5 coins, threshold 5, should buy
-
-    # With 6 coins, skip Duchy
-    state2 = _make_state_with_hand(["Gold", "Copper", "Copper"])  # 5 coins
-    state2.supply = _full_supply()
-    state2.turn = 10
-    state2.buys = 1
-    strategy2 = _make_strategy(
-        mid_buy_priority=["Duchy", "Silver", "PASS"],
-        transitions=Transitions(early_to_mid_turn=4, mid_to_late_provinces=3),
-        duchy_max_coins=4,  # only buy at 4 or below
-    )
-    play_buy_phase(state2, strategy2)
-    # 5 coins > 4 threshold, Duchy skipped
-    assert "Duchy" not in state2.discard
-
-
 # ---------------------------------------------------------------------------
 # Card ID mapping tests
 # ---------------------------------------------------------------------------

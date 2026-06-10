@@ -156,8 +156,6 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
             ]),
         ),
         buy_targets=_crossover_targets(p1.buy_targets, p2.buy_targets, rng),
-        province_max_coins=rng.choice([p1.province_max_coins, p2.province_max_coins]),
-        duchy_max_coins=rng.choice([p1.duchy_max_coins, p2.duchy_max_coins]),
         militia_coin_threshold=rng.choice([p1.militia_coin_threshold, p2.militia_coin_threshold]),
     )
 
@@ -245,14 +243,6 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
             del s.buy_targets[card]  # remove limit
         else:
             s.buy_targets[card] = rng.randint(1, 4)  # add limit
-
-    # Jitter coin thresholds for Province/Duchy
-    if rng.random() < rate:
-        s.province_max_coins += rng.choice([-1, 0, 1])
-        s.province_max_coins = max(8, min(18, s.province_max_coins))
-    if rng.random() < rate:
-        s.duchy_max_coins += rng.choice([-1, 0, 1])
-        s.duchy_max_coins = max(5, min(18, s.duchy_max_coins))
 
     # Jitter militia coin threshold
     if rng.random() < rate:

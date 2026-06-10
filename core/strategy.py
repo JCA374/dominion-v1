@@ -32,8 +32,6 @@ class Strategy:
     mine_trash_priority: list[str] = field(default_factory=list)  # which treasure to upgrade (Copper/Silver)
     chapel_max_trash: int = 4          # 0-4: max cards to trash per Chapel play
     buy_targets: dict[str, int] = field(default_factory=dict)  # card -> max copies to own (empty = no limits)
-    province_max_coins: int = 99       # skip Province if coins > this (99 = always buy)
-    duchy_max_coins: int = 99          # skip Duchy if coins > this (99 = always buy)
     militia_coin_threshold: int = 5    # discard heuristic: keep money if coins >= this
 
 
@@ -153,8 +151,6 @@ def random_strategy(rng: random.Random,
             mid_to_late_turn=rng.randint(5, 30),
         ),
         buy_targets=buy_targets,
-        province_max_coins=rng.choice([8, 9, 10, 11, 99]),
-        duchy_max_coins=rng.choice([5, 6, 7, 8, 99]),
         militia_coin_threshold=rng.randint(3, 8),
     )
 
@@ -284,8 +280,6 @@ def describe(strategy: Strategy, fitness: float | None = None) -> str:
     if strategy.buy_targets:
         targets = ", ".join(f"{c}:{n}" for c, n in strategy.buy_targets.items() if n < 99)
         lines.append(f"Buy targets: {targets}")
-    if strategy.province_max_coins < 99 or strategy.duchy_max_coins < 99:
-        lines.append(f"Coin thresholds: Province≤${strategy.province_max_coins}, Duchy≤${strategy.duchy_max_coins}")
     lines.append(f"Militia discard threshold: ${strategy.militia_coin_threshold}")
     return "\n".join(lines)
 
@@ -510,7 +504,5 @@ def load_strategy(path: str) -> Strategy:
         chapel_max_trash=data.get("chapel_max_trash", 4),
         transitions=Transitions(**transitions_data),
         buy_targets=data.get("buy_targets", {}),
-        province_max_coins=data.get("province_max_coins", 99),
-        duchy_max_coins=data.get("duchy_max_coins", 99),
         militia_coin_threshold=data.get("militia_coin_threshold", 5),
     )

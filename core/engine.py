@@ -372,11 +372,6 @@ def play_buy_phase(state: GameState, strategy: Strategy) -> None:
             if (card_name in state.supply
                     and state.supply[card_name] > 0
                     and ALL_CARDS[card_name].cost <= state.coins):
-                # Coin threshold check: skip if we have too many coins
-                if card_name == "Province" and state.coins > strategy.province_max_coins:
-                    continue
-                if card_name == "Duchy" and state.coins > strategy.duchy_max_coins:
-                    continue
                 # Check buy target limit
                 if card_name in buy_targets:
                     if owned.get(card_name, 0) >= buy_targets[card_name]:

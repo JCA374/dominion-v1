@@ -71,20 +71,18 @@ static int card_special[NUM_CARDS];
 #define S_MID_TO_LATE_PROV      1
 #define S_MID_TO_LATE_TURN      2
 #define S_CHAPEL_MAX_TRASH      3
-#define S_PROVINCE_MAX_COINS    4
-#define S_DUCHY_MAX_COINS       5
-#define S_MILITIA_COIN_THRESH   6
-#define S_EARLY_BUY             7    /* 20 slots */
-#define S_MID_BUY              27    /* 20 slots */
-#define S_LATE_BUY             47    /* 20 slots */
-#define S_ACTION               67    /* 16 slots (single, shared) */
-#define S_EARLY_CHAPEL         83    /* 6 slots */
-#define S_MID_CHAPEL           89    /* 6 slots */
-#define S_LATE_CHAPEL          95    /* 6 slots */
-#define S_THRONE_ROOM_PRIO    101    /* 12 slots */
-#define S_MINE_TRASH_PRIO     113    /* 4 slots */
-#define S_BUY_TARGETS         117    /* 20 slots: (card_id, max) pairs, -1 terminated */
-#define STRATEGY_SIZE         137
+#define S_MILITIA_COIN_THRESH   4
+#define S_EARLY_BUY             5    /* 20 slots */
+#define S_MID_BUY              25    /* 20 slots */
+#define S_LATE_BUY             45    /* 20 slots */
+#define S_ACTION               65    /* 16 slots (single, shared) */
+#define S_EARLY_CHAPEL         81    /* 6 slots */
+#define S_MID_CHAPEL           87    /* 6 slots */
+#define S_LATE_CHAPEL          93    /* 6 slots */
+#define S_THRONE_ROOM_PRIO     99    /* 12 slots */
+#define S_MINE_TRASH_PRIO     111    /* 4 slots */
+#define S_BUY_TARGETS         115    /* 20 slots: (card_id, max) pairs, -1 terminated */
+#define STRATEGY_SIZE         135
 
 /* ── Limits ── */
 #define MAX_DECK   200
@@ -521,9 +519,6 @@ static void play_buy_phase(Player *p, const int *strat, int *supply) {
         for (int i = 0; i < p->play_n; i++) owned[p->play_area[i]]++;
     }
 
-    int prov_max = strat[S_PROVINCE_MAX_COINS];
-    int duchy_max = strat[S_DUCHY_MAX_COINS];
-
     while (p->buys > 0) {
         int bought = 0;
         for (int i = 0; i < 20 && buy_prio[i] != -1; i++) {
@@ -535,10 +530,6 @@ static void play_buy_phase(Player *p, const int *strat, int *supply) {
             if (c < 0 || c >= NUM_CARDS) continue;
             if (supply[c] <= 0) continue;
             if (card_cost[c] > p->coins) continue;
-
-            /* Coin threshold checks */
-            if (c == PROVINCE && p->coins > prov_max) continue;
-            if (c == DUCHY && p->coins > duchy_max) continue;
 
             /* Buy target limit */
             if (has_targets && buy_target[c] >= 0) {
