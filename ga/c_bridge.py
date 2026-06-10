@@ -79,7 +79,7 @@ _lib.init_cards(_card_data)
 # ── Strategy serialization ──
 
 # Strategy layout constants (must match dominion.c)
-STRATEGY_SIZE = 135
+STRATEGY_SIZE = 134
 
 
 def _name_to_id(name: str) -> int:
@@ -111,23 +111,22 @@ def strategy_to_ints(strategy: Strategy) -> ctypes.Array:
     buf[1] = strategy.transitions.mid_to_late_provinces
     buf[2] = strategy.transitions.mid_to_late_turn
     buf[3] = strategy.chapel_max_trash
-    buf[4] = strategy.militia_coin_threshold
 
     # Priority lists
-    _write_list(buf, 5, strategy.early_buy_priority, 20)
-    _write_list(buf, 25, strategy.mid_buy_priority, 20)
-    _write_list(buf, 45, strategy.late_buy_priority, 20)
-    _write_list(buf, 65, strategy.action_priority, 16)
-    _write_list(buf, 81, strategy.early_chapel_trash, 6)
-    _write_list(buf, 87, strategy.mid_chapel_trash, 6)
-    _write_list(buf, 93, strategy.late_chapel_trash, 6)
-    _write_list(buf, 99, strategy.throne_room_priority, 12)
-    _write_list(buf, 111, strategy.mine_trash_priority, 4)
+    _write_list(buf, 4, strategy.early_buy_priority, 20)
+    _write_list(buf, 24, strategy.mid_buy_priority, 20)
+    _write_list(buf, 44, strategy.late_buy_priority, 20)
+    _write_list(buf, 64, strategy.action_priority, 16)
+    _write_list(buf, 80, strategy.early_chapel_trash, 6)
+    _write_list(buf, 86, strategy.mid_chapel_trash, 6)
+    _write_list(buf, 92, strategy.late_chapel_trash, 6)
+    _write_list(buf, 98, strategy.throne_room_priority, 12)
+    _write_list(buf, 110, strategy.mine_trash_priority, 4)
 
     # Buy targets: pairs of (card_id, max_count), -1 terminated
-    offset = 115
+    offset = 114
     for card_name, max_count in strategy.buy_targets.items():
-        if card_name in CARD_ID and offset < 133:
+        if card_name in CARD_ID and offset < 132:
             buf[offset] = CARD_ID[card_name]
             buf[offset + 1] = max_count
             offset += 2

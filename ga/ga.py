@@ -156,7 +156,6 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
             ]),
         ),
         buy_targets=_crossover_targets(p1.buy_targets, p2.buy_targets, rng),
-        militia_coin_threshold=rng.choice([p1.militia_coin_threshold, p2.militia_coin_threshold]),
     )
 
 
@@ -243,11 +242,6 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
             del s.buy_targets[card]  # remove limit
         else:
             s.buy_targets[card] = rng.randint(1, 4)  # add limit
-
-    # Jitter militia coin threshold
-    if rng.random() < rate:
-        s.militia_coin_threshold += rng.choice([-1, 0, 1])
-        s.militia_coin_threshold = max(3, min(8, s.militia_coin_threshold))
 
     return s
 

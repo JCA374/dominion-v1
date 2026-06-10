@@ -1811,33 +1811,34 @@ def test_militia_blocked_by_moat():
     assert len(defender.hand) == 5
 
 
-def test_militia_discard_high_money_keeps_treasures():
-    """With high money, militia discard keeps treasures over actions."""
+def test_militia_discard_dumps_junk_first():
+    """Militia discard removes Curse and Copper before actions."""
     state = _make_player_state(hand=["Gold", "Silver", "Copper", "Village", "Curse"])
     strat = big_money_strategy()
-    strat.militia_coin_threshold = 5  # coins = 6 (Gold+Silver+Copper) >= 5
 
     militia_discard(state, strat)
 
     assert len(state.hand) == 3
-    # Should discard Curse and Village first, keep treasures
+    # Curse and Copper discarded first, keep Gold, Silver, Village
     assert "Curse" not in state.hand
-    assert "Village" not in state.hand
+    assert "Copper" not in state.hand
+    assert "Gold" in state.hand
+    assert "Silver" in state.hand
 
 
-def test_militia_discard_low_money_keeps_actions():
-    """With low money, militia discard keeps actions over coppers."""
-    state = _make_player_state(hand=["Copper", "Copper", "Village", "Smithy", "Estate"])
+def test_militia_discard_duplicates_before_unique():
+    """Militia discard removes duplicate actions before unique ones."""
+    state = _make_player_state(hand=["Smithy", "Smithy", "Village", "Estate", "Silver"])
     strat = big_money_strategy()
-    strat.militia_coin_threshold = 5  # coins = 2 (Copper+Copper) < 5
 
     militia_discard(state, strat)
 
     assert len(state.hand) == 3
-    # Low money: discard Copper first (junk), keep actions + Estate for VP
-    assert "Copper" not in state.hand
+    # Estate discarded first, then duplicate Smithy
+    assert "Estate" not in state.hand
+    assert state.hand.count("Smithy") == 1  # one copy kept
     assert "Village" in state.hand
-    assert "Smithy" in state.hand
+    assert "Silver" in state.hand
 
 
 def test_moat_draws_two_cards():

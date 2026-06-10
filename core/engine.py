@@ -227,58 +227,61 @@ def _has_moat(state: GameState) -> bool:
 
 
 def militia_discard(state: GameState, strategy: Strategy) -> None:
-    """Discard cards from hand until hand size is 3, using coin threshold heuristic.
+    """Discard cards from hand until hand size is 3.
 
-    Uses the evolved action priority lists to decide which actions are least
-    valuable (discard low-priority actions first).
+    Fixed heuristic: Curse > Estate > Copper > Duchy > duplicate actions
+    (worst first) > unique actions (worst first) > Silver > Gold > Province.
+    Duplicate actions are discarded before unique ones since having two
+    copies of the same action is less valuable than two different actions.
     """
-    from core.strategy import get_current_phase, get_action_priority
+    from core.strategy import get_action_priority
 
     if len(state.hand) <= 3:
         return
-    threshold = strategy.militia_coin_threshold
-    hand_coins = sum(ALL_CARDS[c].coins for c in state.hand
-                     if ALL_CARDS[c].card_type == CardType.TREASURE)
 
-    # Get action priority for current phase (most valuable first)
-    phase = get_current_phase(state.turn, state.supply.get("Province", 0),
-                              strategy.transitions)
-    action_priority = get_action_priority(strategy, phase)
+    action_priority = get_action_priority(strategy, "")  # phase ignored (single list)
 
-    # Rank actions in hand: lower index = more valuable = discard last
-    # Actions not in priority list get discarded first
-    def action_discard_rank(card_name):
+    def _action_rank(card_name):
+        """Lower = discard sooner. Cards not in priority list get rank -1."""
         if card_name in action_priority:
-            # Reverse: high priority index = discard first (least valuable last)
-            return len(action_priority) - action_priority.index(card_name)
-        return 0  # unknown actions discarded first
-
-    hand_actions = sorted(
-        [c for c in state.hand if ALL_CARDS[c].card_type == CardType.ACTION],
-        key=action_discard_rank,
-    )
-
-    if hand_coins >= threshold:
-        # High money mode: keep treasures, discard junk/actions first
-        discard_order = ["Curse", "Estate", "Duchy"] + hand_actions + [
-                         "Copper", "Silver", "Gold", "Province"]
-    else:
-        # Low money mode: keep best actions/engine, discard junk/copper first
-        discard_order = ["Curse", "Copper", "Estate", "Duchy",
-                         "Silver"] + hand_actions + [
-                         "Gold", "Province"]
+            return action_priority.index(card_name)
+        return -1
 
     while len(state.hand) > 3:
-        discarded = False
-        for card_name in discard_order:
+        # Rebuild discard order each iteration (hand changes)
+        # 1. Junk VP and Copper
+        for card_name in ["Curse", "Estate", "Copper", "Duchy"]:
             if card_name in state.hand:
                 state.hand.remove(card_name)
                 state.discard.append(card_name)
-                discarded = True
                 break
-        if not discarded:
-            # Fallback: discard first card in hand
-            state.discard.append(state.hand.pop(0))
+        else:
+            # 2. Duplicate actions (worst priority first)
+            from collections import Counter
+            action_counts = Counter(c for c in state.hand
+                                    if ALL_CARDS[c].card_type == CardType.ACTION)
+            duplicates = [c for c, n in action_counts.items() if n > 1]
+            if duplicates:
+                worst_dup = min(duplicates, key=_action_rank)
+                state.hand.remove(worst_dup)
+                state.discard.append(worst_dup)
+            else:
+                # 3. Unique actions (worst priority first)
+                actions = [c for c in state.hand
+                           if ALL_CARDS[c].card_type == CardType.ACTION]
+                if actions:
+                    worst = min(actions, key=_action_rank)
+                    state.hand.remove(worst)
+                    state.discard.append(worst)
+                else:
+                    # 4. Treasures (lowest value first), then Province
+                    for card_name in ["Silver", "Gold", "Province"]:
+                        if card_name in state.hand:
+                            state.hand.remove(card_name)
+                            state.discard.append(card_name)
+                            break
+                    else:
+                        state.discard.append(state.hand.pop(0))
 
 
 def play_militia(state: GameState,

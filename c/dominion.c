@@ -71,18 +71,17 @@ static int card_special[NUM_CARDS];
 #define S_MID_TO_LATE_PROV      1
 #define S_MID_TO_LATE_TURN      2
 #define S_CHAPEL_MAX_TRASH      3
-#define S_MILITIA_COIN_THRESH   4
-#define S_EARLY_BUY             5    /* 20 slots */
-#define S_MID_BUY              25    /* 20 slots */
-#define S_LATE_BUY             45    /* 20 slots */
-#define S_ACTION               65    /* 16 slots (single, shared) */
-#define S_EARLY_CHAPEL         81    /* 6 slots */
-#define S_MID_CHAPEL           87    /* 6 slots */
-#define S_LATE_CHAPEL          93    /* 6 slots */
-#define S_THRONE_ROOM_PRIO     99    /* 12 slots */
-#define S_MINE_TRASH_PRIO     111    /* 4 slots */
-#define S_BUY_TARGETS         115    /* 20 slots: (card_id, max) pairs, -1 terminated */
-#define STRATEGY_SIZE         135
+#define S_EARLY_BUY             4    /* 20 slots */
+#define S_MID_BUY              24    /* 20 slots */
+#define S_LATE_BUY             44    /* 20 slots */
+#define S_ACTION               64    /* 16 slots (single, shared) */
+#define S_EARLY_CHAPEL         80    /* 6 slots */
+#define S_MID_CHAPEL           86    /* 6 slots */
+#define S_LATE_CHAPEL          92    /* 6 slots */
+#define S_THRONE_ROOM_PRIO     98    /* 12 slots */
+#define S_MINE_TRASH_PRIO     110    /* 4 slots */
+#define S_BUY_TARGETS         114    /* 20 slots: (card_id, max) pairs, -1 terminated */
+#define STRATEGY_SIZE         134
 
 /* ── Limits ── */
 #define MAX_DECK   200
@@ -303,63 +302,46 @@ static int action_keep_rank(int card_id, const int *opp_strat) {
 }
 
 /* ── Militia discard: opponent discards down to 3 cards ── */
+/* Fixed heuristic: Curse > Estate > Copper > Duchy > duplicate actions
+ * (worst first) > unique actions (worst first) > Silver > Gold > Province */
 static void militia_discard(Player *p, const int *opp_strat, const int *supply) {
     if (p->hand_n <= 3) return;
 
-    int threshold = opp_strat[S_MILITIA_COIN_THRESH];
-
-    /* Count treasure coins in hand */
-    int hand_coins = 0;
-    for (int i = 0; i < p->hand_n; i++) {
-        if (card_type[p->hand[i]] == TYPE_TREASURE)
-            hand_coins += card_coins[p->hand[i]];
-    }
-
-    /* Discard priority:
-     * High money (>= threshold): Curse, Estate, Duchy, actions(worst first), Copper, Silver, Gold, Province
-     * Low money (< threshold):   Curse, Copper, Estate, Duchy, Silver, actions(worst first), Gold, Province
-     * Actions are ranked using the evolved action priority lists.
-     */
     while (p->hand_n > 3) {
         int best_idx = -1;
         int best_rank = 999;
+
+        /* Count action cards in hand to detect duplicates */
+        int action_count[NUM_CARDS];
+        memset(action_count, 0, sizeof(action_count));
+        for (int i = 0; i < p->hand_n; i++) {
+            int c = p->hand[i];
+            if (card_type[c] == TYPE_ACTION)
+                action_count[c]++;
+        }
 
         for (int i = 0; i < p->hand_n; i++) {
             int c = p->hand[i];
             int rank;
 
-            if (c == CURSE) {
-                rank = 0;
-            } else if (card_type[c] == TYPE_ACTION) {
-                /* Use evolved priority: lower keep_rank = less valuable = discard sooner */
+            if (c == CURSE) rank = 0;
+            else if (c == ESTATE) rank = 10;
+            else if (c == COPPER) rank = 20;
+            else if (c == DUCHY) rank = 30;
+            else if (card_type[c] == TYPE_ACTION) {
                 int keep = action_keep_rank(c, opp_strat);
-                if (hand_coins >= threshold) {
-                    /* High money: actions discarded after junk VP, before treasures */
-                    /* keep 0..212 mapped to rank 30..300 (inverted: low keep = low rank = discard first) */
-                    rank = 300 - keep;
+                if (action_count[c] > 1) {
+                    /* Duplicate action: discard before unique actions */
+                    rank = 500 - keep;
                 } else {
-                    /* Low money: actions kept longer, discarded after Silver */
+                    /* Unique action: keep longer */
                     rank = 700 - keep;
                 }
-            } else if (hand_coins >= threshold) {
-                /* High money: Curse(0) > Estate > Duchy > [actions] > Copper > Silver > Gold > Province */
-                if (c == ESTATE) rank = 10;
-                else if (c == DUCHY) rank = 20;
-                else if (c == COPPER) rank = 400;
-                else if (c == SILVER) rank = 500;
-                else if (c == GOLD) rank = 600;
-                else if (c == PROVINCE) rank = 900;
-                else rank = 300;
-            } else {
-                /* Low money: Curse(0) > Copper > Estate > Duchy > Silver > [actions] > Gold > Province */
-                if (c == COPPER) rank = 10;
-                else if (c == ESTATE) rank = 20;
-                else if (c == DUCHY) rank = 30;
-                else if (c == SILVER) rank = 40;
-                else if (c == GOLD) rank = 800;
-                else if (c == PROVINCE) rank = 900;
-                else rank = 500;
             }
+            else if (c == SILVER) rank = 800;
+            else if (c == GOLD) rank = 850;
+            else if (c == PROVINCE) rank = 900;
+            else rank = 400;
 
             if (rank < best_rank) {
                 best_rank = rank;
