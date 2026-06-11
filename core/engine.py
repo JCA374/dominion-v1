@@ -172,21 +172,34 @@ def _handle_special(state: GameState, card_name: str, strategy: Strategy,
 
 def play_action_phase(state: GameState, strategy: Strategy,
                       opponents: list[tuple[GameState, Strategy]] | None = None) -> int:
-    """Play action cards following a single priority list. Returns count of actions played."""
-    from core.strategy import get_current_phase, get_action_priority
+    """Play action cards: non-terminals first, then terminals. Returns count of actions played."""
+    from core.strategy import (get_current_phase, get_nonterminal_priority,
+                               get_terminal_priority)
     phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
-    priority = get_action_priority(strategy, phase)
+    nt_prio = get_nonterminal_priority(strategy)
+    t_prio = get_terminal_priority(strategy)
 
     actions_played = 0
     while state.actions > 0:
         played = False
-        for card_name in priority:
-            if card_name in state.hand and state.actions > 0:
+        # Tier 1: always exhaust non-terminals first
+        for card_name in nt_prio:
+            if card_name in state.hand:
                 resolve_action(state, card_name)
                 _handle_special(state, card_name, strategy, phase, opponents)
                 actions_played += 1
                 played = True
-                break  # re-scan from top of priority list
+                break
+        if played:
+            continue
+        # Tier 2: then terminals
+        for card_name in t_prio:
+            if card_name in state.hand:
+                resolve_action(state, card_name)
+                _handle_special(state, card_name, strategy, phase, opponents)
+                actions_played += 1
+                played = True
+                break
         if not played:
             break
     return actions_played
@@ -236,19 +249,25 @@ def militia_discard(state: GameState, strategy: Strategy) -> None:
     (worst first) > unique actions (worst first) > Silver > Gold > Province.
     Duplicate actions are discarded before unique ones since having two
     copies of the same action is less valuable than two different actions.
+    Non-terminals are always kept over terminals.
     """
-    from core.strategy import get_action_priority
+    from core.strategy import get_nonterminal_priority, get_terminal_priority
 
     if len(state.hand) <= 3:
         return
 
-    action_priority = get_action_priority(strategy, "")  # phase ignored (single list)
+    nt_prio = get_nonterminal_priority(strategy)
+    t_prio = get_terminal_priority(strategy)
 
     def _action_rank(card_name):
-        """Lower = discard sooner. Cards not in priority list get rank -1."""
-        if card_name in action_priority:
-            return action_priority.index(card_name)
-        return -1
+        """Higher = keep longer. Non-terminals rank above terminals."""
+        if card_name in nt_prio:
+            # Non-terminals: higher rank than any terminal
+            # Earlier in list = higher priority = keep longer = higher rank
+            return 1000 + (len(nt_prio) - nt_prio.index(card_name))
+        if card_name in t_prio:
+            return len(t_prio) - t_prio.index(card_name)
+        return 0
 
     while len(state.hand) > 3:
         # Rebuild discard order each iteration (hand changes)
@@ -359,14 +378,24 @@ def play_buy_phase(state: GameState, strategy: Strategy) -> None:
     phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
     buy_priority = get_buy_priority(strategy, phase)
 
-    # Count owned cards for buy target checks
+    # Count owned cards (always needed for terminal-density rule)
+    owned: dict[str, int] = {}
+    for c in state.deck + state.hand + state.discard + state.play_area:
+        owned[c] = owned.get(c, 0) + 1
+
     buy_targets = strategy.buy_targets
-    if buy_targets:
-        owned: dict[str, int] = {}
-        for c in state.deck + state.hand + state.discard + state.play_area:
-            owned[c] = owned.get(c, 0) + 1
-    else:
-        owned = {}
+
+    # Terminal-density rule: extra_action_capacity and terminals_owned
+    extra_action_capacity = 0
+    terminals_owned = 0
+    for card_name, count in owned.items():
+        if card_name not in ALL_CARDS:
+            continue
+        card = ALL_CARDS[card_name]
+        if card.card_type == CardType.ACTION:
+            extra_action_capacity += count * max(0, card.actions - 1)
+            if card.actions == 0 and card_name != "Throne Room":
+                terminals_owned += count
 
     # Buy cards
     while state.buys > 0:
@@ -382,8 +411,20 @@ def play_buy_phase(state: GameState, strategy: Strategy) -> None:
                 if card_name in buy_targets:
                     if owned.get(card_name, 0) >= buy_targets[card_name]:
                         continue  # skip, already at target
+                # Terminal-density rule: don't buy terminals the deck can't support
+                card = ALL_CARDS[card_name]
+                if (card.card_type == CardType.ACTION
+                        and card.actions == 0
+                        and card_name != "Throne Room"
+                        and terminals_owned >= extra_action_capacity + strategy.terminal_slack):
+                    continue  # skip, too many terminals
                 buy_card(state, card_name)
                 owned[card_name] = owned.get(card_name, 0) + 1
+                # Update terminal-density counts incrementally
+                if card.card_type == CardType.ACTION:
+                    extra_action_capacity += max(0, card.actions - 1)
+                    if card.actions == 0 and card_name != "Throne Room":
+                        terminals_owned += 1
                 bought = True
                 break  # re-scan from top of priority list
         if not bought:

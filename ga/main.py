@@ -19,8 +19,8 @@ import os
 import random
 
 # === Config ===
-POP_SIZE        = 60 #60
-GENERATIONS     = 10000
+POP_SIZE        = 100
+GENERATIONS     = 50000
 GAMES_PER_EVAL  = 80 #50
 TOURNAMENT_SIZE = 3
 ELITE_COUNT     = 2
@@ -31,13 +31,17 @@ KINGDOM1        = ["Village", "Smithy", "Market", "Laboratory", "Festival", "Cha
                    "Throne Room", "Mine", "Moneylender", "Merchant"]
 KINGDOM2        = ["Village", "Smithy", "Market", "Laboratory", "Chapel",
                    "Throne Room", "Mine", "Militia", "Moat", "Witch"]
+KINGDOM3        = ["Village", "Smithy", "Market", "Laboratory", "Festival",
+                   "Council Room", "Merchant", "Moat", "Chapel", "Throne Room"]
 # Active kingdom for training
-KINGDOM         = KINGDOM2
+KINGDOM         = KINGDOM1
 HALL_MAX_SIZE   = 6    # Maximum hall of fame opponents
 HALL_ADD_THRESHOLD = 0.55  # Add to hall when win rate exceeds this
-VP_MARGIN_WEIGHT = 0.5  # Blend VP margin into fitness (0=win rate only, 1=margin only)
-SPEED_WEIGHT    = 0.2  # Reward faster wins (25 turns=0, 15 turns=max)
-ENGINE_WEIGHT   = 0.05 # Reward engine-like play (more actions per turn)
+VP_MARGIN_WEIGHT     = 0.30  # Blend VP margin into fitness (0=win rate only, 1=margin only)
+SPEED_WEIGHT         = 0.0   # Disabled — speed bonus punishes engine setup turns
+ENGINE_WEIGHT        = 0.25  # Reward engine-like play (more actions per turn)
+ENGINE_WEIGHT_END    = 0.10  # Engine weight decays to this over anneal period
+ENGINE_ANNEAL_GENS   = 300   # Generations over which engine weight decays
 WORKERS         = 8    # Parallel workers for evaluation (1 = sequential)
 
 
@@ -121,6 +125,8 @@ def main():
         "vp_margin_weight": VP_MARGIN_WEIGHT,
         "speed_weight": SPEED_WEIGHT,
         "engine_weight": ENGINE_WEIGHT,
+        "engine_weight_end": ENGINE_WEIGHT_END,
+        "engine_anneal_gens": ENGINE_ANNEAL_GENS,
         "tier2_count": 15,
         "tier2_seeds": 400,
         "workers": WORKERS,

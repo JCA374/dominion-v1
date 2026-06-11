@@ -23,7 +23,9 @@ class Strategy:
     early_buy_priority: list[str]
     mid_buy_priority: list[str]
     late_buy_priority: list[str]
-    action_priority: list[str] = field(default_factory=list)  # single list, shared across phases
+    nonterminal_priority: list[str] = field(default_factory=list)  # cards with actions > 0
+    terminal_priority: list[str] = field(default_factory=list)     # cards with actions == 0
+    terminal_slack: int = 1  # used by terminal-density buy rule
     early_chapel_trash: list[str] = field(default_factory=list)
     mid_chapel_trash: list[str] = field(default_factory=list)
     late_chapel_trash: list[str] = field(default_factory=list)
@@ -56,9 +58,19 @@ def get_buy_priority(strategy: Strategy, phase: str) -> list[str]:
         return strategy.late_buy_priority
 
 
+def get_nonterminal_priority(strategy: Strategy) -> list[str]:
+    """Return the non-terminal action priority list (cards with actions > 0)."""
+    return strategy.nonterminal_priority
+
+
+def get_terminal_priority(strategy: Strategy) -> list[str]:
+    """Return the terminal action priority list (cards with actions == 0)."""
+    return strategy.terminal_priority
+
+
 def get_action_priority(strategy: Strategy, phase: str) -> list[str]:
-    """Return the single action priority list (shared across phases)."""
-    return strategy.action_priority
+    """Deprecated: return merged nonterminal + terminal priority list."""
+    return strategy.nonterminal_priority + strategy.terminal_priority
 
 
 def get_chapel_trash_priority(strategy: Strategy, phase: str) -> list[str]:
@@ -101,7 +113,6 @@ def random_strategy(rng: random.Random,
                     kingdom: list[str] | None = None) -> Strategy:
     """Generate a random strategy with shuffled priority lists."""
     buyable = _buyable_cards(kingdom)
-    actions = _action_cards(kingdom)
 
     def shuffled(lst):
         copy = list(lst)
@@ -120,13 +131,24 @@ def random_strategy(rng: random.Random,
     mid_chapel = ["Curse", "Estate", "Copper", "STOP"]
     late_chapel = ["Curse", "STOP"]
 
-    # Buy targets: max copies to own per card (action cards 1-5, others uncapped)
+    # Buy targets: max copies to own per card
     kingdom_cards = kingdom if kingdom is not None else KINGDOM_CARDS
     buy_targets: dict[str, int] = {}
     for card in kingdom_cards:
-        buy_targets[card] = rng.randint(1, 5)
+        c = ALL_CARDS[card]
+        if c.card_type == CardType.ACTION and c.actions > 0:
+            buy_targets[card] = rng.randint(2, 8)    # engine components
+        elif c.card_type == CardType.ACTION:
+            buy_targets[card] = rng.randint(1, 3)    # terminals (density rule guards these)
+        else:
+            buy_targets[card] = rng.randint(2, 8)    # victory kingdom cards (e.g. Gardens)
+
+    # Split action priorities: non-terminals and terminals
+    nt_actions = _nonterminal_actions(kingdom)
+    t_actions = _terminal_actions(kingdom)
 
     # Throne Room priority: which action to double (excludes Throne Room itself)
+    actions = _action_cards(kingdom)
     tr_candidates = [c for c in actions if c != "Throne Room"]
     throne_room_priority = shuffled(tr_candidates)
 
@@ -137,7 +159,9 @@ def random_strategy(rng: random.Random,
         early_buy_priority=random_buy_priority(),
         mid_buy_priority=random_buy_priority(),
         late_buy_priority=random_buy_priority(),
-        action_priority=shuffled(actions),
+        nonterminal_priority=shuffled(nt_actions),
+        terminal_priority=shuffled(t_actions),
+        terminal_slack=rng.randint(0, 3),
         early_chapel_trash=early_chapel,
         mid_chapel_trash=mid_chapel,
         late_chapel_trash=late_chapel,
@@ -184,12 +208,15 @@ def big_money_strategy(kingdom: list[str] | None = None) -> Strategy:
     Uses explicit PASS-terminated lists so it never buys junk (Copper, Chapel, etc.)
     when it can't afford its preferred cards.
     """
-    actions = _action_cards(kingdom)
+    nt_actions = _nonterminal_actions(kingdom)
+    t_actions = _terminal_actions(kingdom)
     return Strategy(
         early_buy_priority=["Gold", "Silver", "PASS"],
         mid_buy_priority=["Province", "Gold", "Silver", "PASS"],
         late_buy_priority=["Province", "Duchy", "Gold", "Estate", "Silver", "PASS"],
-        action_priority=actions[:],
+        nonterminal_priority=nt_actions[:],
+        terminal_priority=t_actions[:],
+        terminal_slack=1,
         early_chapel_trash=["STOP"],
         mid_chapel_trash=["STOP"],
         late_chapel_trash=["STOP"],
@@ -204,12 +231,16 @@ def big_money_strategy(kingdom: list[str] | None = None) -> Strategy:
 def gardens_strategy(kingdom: list[str] | None = None) -> Strategy:
     """Seed archetype: Gardens rush — buy lots of cheap cards for VP."""
     actions = _action_cards(kingdom)
+    nt_actions = _nonterminal_actions(kingdom)
+    t_actions = _terminal_actions(kingdom)
     tr_candidates = [c for c in actions if c != "Throne Room"]
     return Strategy(
         early_buy_priority=_full_buy_priority(["Gardens", "Silver", "Throne Room"], kingdom),
         mid_buy_priority=_full_buy_priority(["Gardens", "Silver", "Throne Room", "Copper", "Estate"], kingdom),
         late_buy_priority=_full_buy_priority(["Province", "Gardens", "Duchy", "Estate", "Copper"], kingdom),
-        action_priority=actions[:],
+        nonterminal_priority=nt_actions[:],
+        terminal_priority=t_actions[:],
+        terminal_slack=1,
         early_chapel_trash=["STOP"],
         mid_chapel_trash=["STOP"],
         late_chapel_trash=["STOP"],
@@ -224,20 +255,27 @@ def gardens_strategy(kingdom: list[str] | None = None) -> Strategy:
 def engine_strategy(kingdom: list[str] | None = None) -> Strategy:
     """Seed archetype: Chapel engine — thin deck early, build mid, green late."""
     actions = _action_cards(kingdom)
+    nt_actions = _nonterminal_actions(kingdom)
+    t_actions = _terminal_actions(kingdom)
     tr_candidates = [c for c in actions if c != "Throne Room"]
-    all_targets = {"Chapel": 1, "Smithy": 2, "Village": 3, "Market": 2,
-                   "Laboratory": 3, "Festival": 2, "Council Room": 2,
-                   "Moneylender": 1, "Throne Room": 2, "Mine": 1, "Merchant": 2}
+    all_targets = {"Village": 5, "Laboratory": 4, "Market": 3, "Festival": 3,
+                   "Merchant": 3, "Smithy": 3, "Chapel": 1, "Throne Room": 2,
+                   "Mine": 1, "Moneylender": 1, "Council Room": 2}
     kingdom_set = set(kingdom) if kingdom is not None else None
     buy_targets = {k: v for k, v in all_targets.items()
                    if kingdom_set is None or k in kingdom_set}
-    # Single action priority: Village/draw cards first (mid-game ordering)
-    action_prio = _prioritize(["Village", "Laboratory", "Smithy", "Market", "Chapel"], actions)
+    # Non-terminal priority: Village > Laboratory > Market > Merchant > Festival
+    nt_prio = _prioritize(["Village", "Laboratory", "Market", "Merchant", "Festival"], nt_actions)
+    # Terminal priority: Chapel > Smithy > Throne Room > Moneylender > Mine > Council Room > Militia > Witch > Moat
+    t_prio = _prioritize(["Chapel", "Smithy", "Throne Room", "Moneylender", "Mine",
+                           "Council Room", "Militia", "Witch", "Moat"], t_actions)
     return Strategy(
         early_buy_priority=_full_buy_priority(["Chapel", "Silver", "Village"], kingdom),
-        mid_buy_priority=_full_buy_priority(["Gold", "Smithy", "Silver", "Market", "Laboratory"], kingdom),
+        mid_buy_priority=_full_buy_priority(["Laboratory", "Village", "Smithy", "Market", "Festival", "Gold", "Silver"], kingdom),
         late_buy_priority=_full_buy_priority(["Province", "Duchy", "Gold", "Estate"], kingdom),
-        action_priority=action_prio,
+        nonterminal_priority=nt_prio,
+        terminal_priority=t_prio,
+        terminal_slack=1,
         early_chapel_trash=["Curse", "Estate", "Copper", "STOP"],
         mid_chapel_trash=["Curse", "Estate", "STOP", "Copper"],
         late_chapel_trash=["Curse", "STOP"],
@@ -267,7 +305,9 @@ def describe(strategy: Strategy, fitness: float | None = None) -> str:
     lines.append(f"EARLY (turns 1-{t.early_to_mid_turn}):   {fmt_list(strategy.early_buy_priority)}")
     lines.append(f"MID   (>{t.mid_to_late_provinces} Prov or <t{t.mid_to_late_turn}): {fmt_list(strategy.mid_buy_priority)}")
     lines.append(f"LATE  (<={t.mid_to_late_provinces} Prov):  {fmt_list(strategy.late_buy_priority)}")
-    lines.append(f"Actions: {fmt_list(strategy.action_priority)}")
+    lines.append(f"Non-terminals: {fmt_list(strategy.nonterminal_priority)}")
+    lines.append(f"Terminals: {fmt_list(strategy.terminal_priority)}")
+    lines.append(f"Terminal slack: {strategy.terminal_slack}")
     if strategy.throne_room_priority:
         lines.append(f"Throne Room doubles: {fmt_list(strategy.throne_room_priority)}")
     if strategy.mine_trash_priority:
@@ -355,10 +395,13 @@ def summarize(strategy: Strategy, vs_bm: dict) -> str:
 
     # --- Action play order ---
     lines.append("")
-    lines.append("  Action Play Order")
+    lines.append("  Action Play Order (non-terminals first)")
     lines.append(f"  {'─' * 40}")
-    if strategy.action_priority:
-        lines.append(f"  {' > '.join(strategy.action_priority[:8])}")
+    if strategy.nonterminal_priority:
+        lines.append(f"  Non-terminals: {' > '.join(strategy.nonterminal_priority[:6])}")
+    if strategy.terminal_priority:
+        lines.append(f"  Terminals: {' > '.join(strategy.terminal_priority[:6])}")
+    lines.append(f"  Terminal slack: {strategy.terminal_slack}")
 
     # --- Chapel strategy ---
     lines.append("")
@@ -461,15 +504,21 @@ def load_strategy(path: str) -> Strategy:
                                     [c for c in ACTION_CARDS if c != "Throne Room"])
     mine_trash_priority = data.get("mine_trash_priority", ["Copper", "Silver"])
 
-    # Action priority (backward compat from old per-phase or NT/T split)
-    if "action_priority" in data:
-        action_prio = data["action_priority"]
-    elif "early_action_priority" in data:
-        action_prio = data["early_action_priority"]  # pick early as representative
+    # Action priority (backward compat from multiple old formats)
+    if "nonterminal_priority" in data:
+        nt_prio = data["nonterminal_priority"]
+        t_prio = data["terminal_priority"]
+    elif "action_priority" in data:
+        # Old single-list format: split by card actions > 0
+        nt_prio = [c for c in data["action_priority"] if c in ALL_CARDS and ALL_CARDS[c].actions > 0]
+        t_prio = [c for c in data["action_priority"] if c in ALL_CARDS and ALL_CARDS[c].actions == 0]
     elif "early_nonterminal_priority" in data:
-        action_prio = data["early_nonterminal_priority"] + data["early_terminal_priority"]
+        nt_prio = data["early_nonterminal_priority"]
+        t_prio = data["early_terminal_priority"]
     else:
-        action_prio = ACTION_CARDS[:]
+        nt_prio = [c for c in ACTION_CARDS if ALL_CARDS[c].actions > 0]
+        t_prio = [c for c in ACTION_CARDS if ALL_CARDS[c].actions == 0]
+    terminal_slack = data.get("terminal_slack", 1)
 
     # Phase-specific chapel trash (backward compat from single chapel_trash_priority)
     if "early_chapel_trash" in data:
@@ -492,7 +541,9 @@ def load_strategy(path: str) -> Strategy:
         early_buy_priority=data["early_buy_priority"],
         mid_buy_priority=data["mid_buy_priority"],
         late_buy_priority=data["late_buy_priority"],
-        action_priority=action_prio,
+        nonterminal_priority=nt_prio,
+        terminal_priority=t_prio,
+        terminal_slack=terminal_slack,
         early_chapel_trash=early_ct,
         mid_chapel_trash=mid_ct,
         late_chapel_trash=late_ct,

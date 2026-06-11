@@ -71,17 +71,19 @@ static int card_special[NUM_CARDS];
 #define S_MID_TO_LATE_PROV      1
 #define S_MID_TO_LATE_TURN      2
 #define S_CHAPEL_MAX_TRASH      3
-#define S_EARLY_BUY             4    /* 20 slots */
-#define S_MID_BUY              24    /* 20 slots */
-#define S_LATE_BUY             44    /* 20 slots */
-#define S_ACTION               64    /* 16 slots (single, shared) */
-#define S_EARLY_CHAPEL         80    /* 6 slots */
-#define S_MID_CHAPEL           86    /* 6 slots */
-#define S_LATE_CHAPEL          92    /* 6 slots */
-#define S_THRONE_ROOM_PRIO     98    /* 12 slots */
-#define S_MINE_TRASH_PRIO     110    /* 4 slots */
-#define S_BUY_TARGETS         114    /* 20 slots: (card_id, max) pairs, -1 terminated */
-#define STRATEGY_SIZE         134
+#define S_TERMINAL_SLACK        4
+#define S_EARLY_BUY             5    /* 20 slots */
+#define S_MID_BUY              25    /* 20 slots */
+#define S_LATE_BUY             45    /* 20 slots */
+#define S_NT_ACTION            65    /* 8 slots (non-terminal actions) */
+#define S_T_ACTION             73    /* 12 slots (terminal actions) */
+#define S_EARLY_CHAPEL         85    /* 6 slots */
+#define S_MID_CHAPEL           91    /* 6 slots */
+#define S_LATE_CHAPEL          97    /* 6 slots */
+#define S_THRONE_ROOM_PRIO    103    /* 12 slots */
+#define S_MINE_TRASH_PRIO     115    /* 4 slots */
+#define S_BUY_TARGETS         119    /* 20 slots: (card_id, max) pairs, -1 terminated */
+#define STRATEGY_SIZE         139
 
 /* ── Limits ── */
 #define MAX_DECK   200
@@ -288,15 +290,21 @@ static int has_moat(const Player *p) {
 /* Forward declaration */
 static int get_phase(int turn, int provinces_remaining, const int *strat);
 
-/* ── Rank an action card for militia discard using evolved action priority ──
- * Lower rank = discard first (least valuable).
- * Higher position in the priority list = more valuable = higher keep rank.
+/* ── Rank an action card for militia discard using split priority lists ──
+ * Higher rank = keep longer. Non-terminals always rank above terminals.
  */
 static int action_keep_rank(int card_id, const int *opp_strat) {
-    const int *prio = opp_strat + S_ACTION;
-    for (int i = 0; i < 16 && prio[i] != -1; i++) {
-        if (prio[i] == card_id)
-            return 100 + (16 - i);  /* top = 116, lowest = 101 */
+    /* Check non-terminal list first (higher base rank) */
+    const int *nt_prio = opp_strat + S_NT_ACTION;
+    for (int i = 0; i < 8 && nt_prio[i] != -1; i++) {
+        if (nt_prio[i] == card_id)
+            return 1000 + (8 - i);  /* non-terminals: 1001-1008 */
+    }
+    /* Check terminal list */
+    const int *t_prio = opp_strat + S_T_ACTION;
+    for (int i = 0; i < 12 && t_prio[i] != -1; i++) {
+        if (t_prio[i] == card_id)
+            return 12 - i;  /* terminals: 1-12 */
     }
     return 0;  /* unknown action: discard first */
 }
@@ -441,24 +449,38 @@ static int get_phase(int turn, int provinces_remaining, const int *strat) {
         return 2;
 }
 
-/* ── Play action phase (single merged priority list) ── */
+/* ── Play action phase (two-tier: non-terminals first, then terminals) ── */
 static int play_action_phase(Player *p, const int *strat, int *supply,
                              Player *opponent, const int *opp_strat) {
     int phase = get_phase(p->turn, supply[PROVINCE], strat);
 
-    const int *prio = strat + S_ACTION;
+    const int *nt_prio = strat + S_NT_ACTION;
+    const int *t_prio = strat + S_T_ACTION;
     int actions_played = 0;
 
     while (p->actions > 0) {
         int played = 0;
-        for (int i = 0; i < 16 && prio[i] != -1; i++) {
-            int c = prio[i];
-            if (p->actions > 0 && arr_contains(p->hand, p->hand_n, c)) {
+        /* Tier 1: always exhaust non-terminals first */
+        for (int i = 0; i < 8 && nt_prio[i] != -1; i++) {
+            int c = nt_prio[i];
+            if (arr_contains(p->hand, p->hand_n, c)) {
                 resolve_action(p, c);
                 handle_special(p, c, strat, phase, supply, opponent, opp_strat);
                 actions_played++;
                 played = 1;
-                break; /* re-scan from top */
+                break;
+            }
+        }
+        if (played) continue;
+        /* Tier 2: then terminals */
+        for (int i = 0; i < 12 && t_prio[i] != -1; i++) {
+            int c = t_prio[i];
+            if (arr_contains(p->hand, p->hand_n, c)) {
+                resolve_action(p, c);
+                handle_special(p, c, strat, phase, supply, opponent, opp_strat);
+                actions_played++;
+                played = 1;
+                break;
             }
         }
         if (!played) break;
@@ -490,18 +512,29 @@ static void play_buy_phase(Player *p, const int *strat, int *supply) {
         }
     }
 
-    /* Count owned cards for buy target checks */
+    /* Count owned cards (always needed for terminal-density rule) */
+    int owned[NUM_CARDS];
+    memset(owned, 0, sizeof(owned));
+    for (int i = 0; i < p->deck_n; i++) owned[p->deck[i]]++;
+    for (int i = 0; i < p->hand_n; i++) owned[p->hand[i]]++;
+    for (int i = 0; i < p->discard_n; i++) owned[p->discard[i]]++;
+    for (int i = 0; i < p->play_n; i++) owned[p->play_area[i]]++;
+
     int has_targets = 0;
     for (int i = 0; i < NUM_CARDS; i++)
         if (buy_target[i] >= 0) { has_targets = 1; break; }
 
-    int owned[NUM_CARDS];
-    if (has_targets) {
-        memset(owned, 0, sizeof(owned));
-        for (int i = 0; i < p->deck_n; i++) owned[p->deck[i]]++;
-        for (int i = 0; i < p->hand_n; i++) owned[p->hand[i]]++;
-        for (int i = 0; i < p->discard_n; i++) owned[p->discard[i]]++;
-        for (int i = 0; i < p->play_n; i++) owned[p->play_area[i]]++;
+    /* Terminal-density rule: compute extra_action_capacity and terminals_owned */
+    int extra_action_capacity = 0;
+    int terminals_owned = 0;
+    int terminal_slack = strat[S_TERMINAL_SLACK];
+    for (int i = 0; i < NUM_CARDS; i++) {
+        if (owned[i] > 0 && card_type[i] == TYPE_ACTION) {
+            int extra = card_actions[i] - 1;
+            if (extra > 0) extra_action_capacity += owned[i] * extra;
+            if (card_actions[i] == 0 && i != THRONE_ROOM)
+                terminals_owned += owned[i];
+        }
     }
 
     while (p->buys > 0) {
@@ -521,8 +554,22 @@ static void play_buy_phase(Player *p, const int *strat, int *supply) {
                 if (owned[c] >= buy_target[c]) continue;
             }
 
+            /* Terminal-density rule: don't buy terminals the deck can't support */
+            if (card_type[c] == TYPE_ACTION && card_actions[c] == 0
+                    && c != THRONE_ROOM
+                    && terminals_owned >= extra_action_capacity + terminal_slack) {
+                continue;
+            }
+
             buy_card(p, c, supply);
-            if (has_targets) owned[c]++;
+            owned[c]++;
+            /* Update terminal-density counts incrementally */
+            if (card_type[c] == TYPE_ACTION) {
+                int extra = card_actions[c] - 1;
+                if (extra > 0) extra_action_capacity += extra;
+                if (card_actions[c] == 0 && c != THRONE_ROOM)
+                    terminals_owned++;
+            }
             bought = 1;
             break; /* re-scan from top */
         }

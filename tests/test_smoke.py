@@ -18,6 +18,7 @@ from core.strategy import (
     Strategy, Transitions, get_current_phase, random_strategy,
     big_money_strategy, engine_strategy, describe,
     save_best_model, load_strategy, get_action_priority,
+    get_nonterminal_priority, get_terminal_priority,
     get_chapel_trash_priority,
 )
 from ga.fitness import evaluate, evaluate_vs_opponent, make_seed_list, USE_C_ENGINE
@@ -118,7 +119,7 @@ def test_nonterminals_play_before_terminals():
     state.turn = 1
     # Village listed before Smithy in priority — plays first
     strategy = _make_strategy(
-        action_priority=["Village", "Smithy"],
+        nonterminal_priority=["Village"], terminal_priority=["Smithy"],
         transitions=Transitions(early_to_mid_turn=3, mid_to_late_provinces=4),
     )
     play_action_phase(state, strategy)
@@ -139,7 +140,7 @@ def test_drawn_action_plays_in_order():
     state.supply = _full_supply()
     state.turn = 1
     strategy = _make_strategy(
-        action_priority=["Village", "Smithy"],
+        nonterminal_priority=["Village"], terminal_priority=["Smithy"],
     )
     play_action_phase(state, strategy)
     # Village plays (+2 actions, draws — might draw Smithy), then Smithy plays
@@ -158,7 +159,7 @@ def test_phase_specific_chapel_trash():
     state_early.supply = _full_supply()
     state_early.turn = 1
     strategy = _make_strategy(
-        action_priority=["Chapel"],
+        nonterminal_priority=[], terminal_priority=["Chapel"],
         early_chapel_trash=["Estate", "Copper", "STOP"],
         mid_chapel_trash=["Estate", "STOP"],
         late_chapel_trash=["STOP"],  # never trash late
@@ -195,9 +196,13 @@ def test_random_strategies_valid():
             assert len(non_pass) == len(set(non_pass)), f"Duplicates in {lst_name}"
             assert lst.count("PASS") <= 1
 
-        ap = s.action_priority
-        assert set(ap) == action_set, f"Invalid action_priority: {ap}"
-        assert len(ap) == len(action_set), f"Duplicates in action_priority"
+        nt_set = {c for c in ACTION_CARDS if ALL_CARDS[c].actions > 0}
+        t_set = {c for c in ACTION_CARDS if ALL_CARDS[c].actions == 0}
+        assert set(s.nonterminal_priority) == nt_set, f"Invalid nonterminal_priority: {s.nonterminal_priority}"
+        assert len(s.nonterminal_priority) == len(nt_set), f"Duplicates in nonterminal_priority"
+        assert set(s.terminal_priority) == t_set, f"Invalid terminal_priority: {s.terminal_priority}"
+        assert len(s.terminal_priority) == len(t_set), f"Duplicates in terminal_priority"
+        assert 0 <= s.terminal_slack <= 3
 
         for ct_name in ["early_chapel_trash", "mid_chapel_trash", "late_chapel_trash"]:
             ct = getattr(s, ct_name)
@@ -313,7 +318,8 @@ def _make_strategy(**overrides) -> Strategy:
         early_buy_priority=BUYABLE_CARDS[:],
         mid_buy_priority=BUYABLE_CARDS[:],
         late_buy_priority=BUYABLE_CARDS[:],
-        action_priority=ACTION_CARDS[:],
+        nonterminal_priority=[c for c in ACTION_CARDS if ALL_CARDS[c].actions > 0],
+        terminal_priority=[c for c in ACTION_CARDS if ALL_CARDS[c].actions == 0],
         early_chapel_trash=["Estate", "Copper", "STOP"],
         mid_chapel_trash=["Estate", "Copper", "STOP"],
         late_chapel_trash=["STOP"],
@@ -330,11 +336,15 @@ def _make_strategy(**overrides) -> Strategy:
 def _action_strategy(card_name):
     """Helper: strategy that plays a single action card."""
     prov_first = ["Province"] + [c for c in BUYABLE_CARDS if c != "Province"]
+    if ALL_CARDS[card_name].actions > 0:
+        nt, t = [card_name], []
+    else:
+        nt, t = [], [card_name]
     return _make_strategy(
         early_buy_priority=prov_first,
         mid_buy_priority=prov_first,
         late_buy_priority=prov_first,
-        action_priority=[card_name],
+        nonterminal_priority=nt, terminal_priority=t,
     )
 
 
@@ -424,7 +434,7 @@ def test_village_then_smithy_chain():
         deck=["Copper", "Silver", "Gold", "Estate"],
     )
     strategy = _make_strategy(
-        action_priority=["Village", "Smithy"],
+        nonterminal_priority=["Village"], terminal_priority=["Smithy"],
     )
 
     play_action_phase(state, strategy)
@@ -600,7 +610,7 @@ def test_chapel_trashes_cards():
 def _chapel_strategy(trash_priority):
     """Helper: strategy that plays Chapel with given trash priority in all phases."""
     return _make_strategy(
-        action_priority=["Chapel"],
+        nonterminal_priority=[], terminal_priority=["Chapel"],
         early_chapel_trash=trash_priority,
         mid_chapel_trash=trash_priority,
         late_chapel_trash=trash_priority,
@@ -831,7 +841,7 @@ def test_action_without_extra_actions_plays_one():
     """With 1 action and no +action cards, only one action card is played."""
     state = _make_state_with_hand(["Smithy", "Smithy"])
     strategy = _make_strategy(
-        action_priority=["Smithy"],
+        nonterminal_priority=[], terminal_priority=["Smithy"],
     )
 
     play_action_phase(state, strategy)
@@ -931,7 +941,7 @@ def test_full_turn_action_buy_cleanup():
     state.turn = 1
     strategy = _make_strategy(
         early_buy_priority=["Silver"] + [c for c in BUYABLE_CARDS if c != "Silver"],
-        action_priority=["Village"],
+        nonterminal_priority=["Village"], terminal_priority=[],
     )
 
     # Action phase: Village played, draws 1, gets +2 actions
@@ -1025,7 +1035,7 @@ def test_throne_room_doubles_smithy():
         deck=["Copper"] * 10,
     )
     strategy = _make_strategy(
-        action_priority=["Throne Room", "Smithy"],
+        nonterminal_priority=[], terminal_priority=["Throne Room", "Smithy"],
         throne_room_priority=["Smithy"],
     )
 
@@ -1044,7 +1054,7 @@ def test_throne_room_doubles_chapel():
         deck=["Silver"] * 5,
     )
     strategy = _make_strategy(
-        action_priority=["Throne Room", "Chapel"],
+        nonterminal_priority=[], terminal_priority=["Throne Room", "Chapel"],
         throne_room_priority=["Chapel"],
         early_chapel_trash=["Estate", "Copper", "STOP"],
         mid_chapel_trash=["Estate", "Copper", "STOP"],
@@ -1067,7 +1077,7 @@ def test_throne_room_no_target():
         deck=["Copper"] * 10,
     )
     strategy = _make_strategy(
-        action_priority=["Throne Room", "Smithy"],
+        nonterminal_priority=[], terminal_priority=["Throne Room", "Smithy"],
         throne_room_priority=["Smithy"],
     )
 
@@ -1086,7 +1096,7 @@ def test_throne_room_doubles_moneylender():
         deck=["Gold"] * 5,
     )
     strategy = _make_strategy(
-        action_priority=["Throne Room", "Moneylender"],
+        nonterminal_priority=[], terminal_priority=["Throne Room", "Moneylender"],
         throne_room_priority=["Moneylender"],
     )
 
@@ -1098,14 +1108,14 @@ def test_throne_room_doubles_moneylender():
 
 
 def test_throne_room_priority_matters():
-    """Throne Room should pick target from throne_room_priority, not action_priority."""
+    """Throne Room should pick target from throne_room_priority, not terminal_priority."""
     state = _make_state_with_hand(
         ["Throne Room", "Smithy", "Moneylender"],
         deck=["Copper"] * 10,
     )
-    # action_priority prefers Smithy first, but throne_room_priority prefers Moneylender
+    # terminal_priority prefers Smithy first, but throne_room_priority prefers Moneylender
     strategy = _make_strategy(
-        action_priority=["Throne Room", "Smithy", "Moneylender"],
+        nonterminal_priority=[], terminal_priority=["Throne Room", "Smithy", "Moneylender"],
         throne_room_priority=["Moneylender", "Smithy"],
     )
 
@@ -1195,7 +1205,7 @@ def test_mine_upgrades_copper_to_silver():
     """Mine should trash Copper and gain Silver to hand."""
     state = _make_state_with_hand(["Mine", "Copper", "Silver"])
     strategy = _make_strategy(
-        action_priority=["Mine"],
+        nonterminal_priority=[], terminal_priority=["Mine"],
         mine_trash_priority=["Copper", "Silver"],
     )
 
@@ -1213,7 +1223,7 @@ def test_mine_upgrades_silver_to_gold():
     """Mine should trash Silver and gain Gold to hand."""
     state = _make_state_with_hand(["Mine", "Silver", "Copper"])
     strategy = _make_strategy(
-        action_priority=["Mine"],
+        nonterminal_priority=[], terminal_priority=["Mine"],
         mine_trash_priority=["Silver", "Copper"],
     )
 
@@ -1228,7 +1238,7 @@ def test_mine_no_treasure():
     """Mine with no treasure in hand does nothing."""
     state = _make_state_with_hand(["Mine", "Estate", "Estate"])
     strategy = _make_strategy(
-        action_priority=["Mine"],
+        nonterminal_priority=[], terminal_priority=["Mine"],
     )
 
     play_action_phase(state, strategy)
@@ -1241,7 +1251,7 @@ def test_mine_empty_supply_skips():
     state = _make_state_with_hand(["Mine", "Copper", "Copper"])
     state.supply["Silver"] = 0
     strategy = _make_strategy(
-        action_priority=["Mine"],
+        nonterminal_priority=[], terminal_priority=["Mine"],
     )
 
     play_action_phase(state, strategy)
@@ -1256,7 +1266,7 @@ def test_merchant_bonus_with_silver():
     state = _make_state_with_hand(["Merchant", "Silver", "Copper"],
                                   deck=["Estate"] * 5)
     strategy = _make_strategy(
-        action_priority=["Merchant"],
+        nonterminal_priority=["Merchant"], terminal_priority=[],
     )
 
     play_action_phase(state, strategy)
@@ -1275,7 +1285,7 @@ def test_merchant_no_silver_no_bonus():
     state = _make_state_with_hand(["Merchant", "Copper", "Copper"],
                                   deck=["Estate"] * 5)
     strategy = _make_strategy(
-        action_priority=["Merchant"],
+        nonterminal_priority=["Merchant"], terminal_priority=[],
     )
 
     play_action_phase(state, strategy)
@@ -1321,7 +1331,9 @@ def test_save_and_load_best_model(tmp_path):
     assert loaded.early_buy_priority == strategy.early_buy_priority
     assert loaded.mid_buy_priority == strategy.mid_buy_priority
     assert loaded.late_buy_priority == strategy.late_buy_priority
-    assert loaded.action_priority == strategy.action_priority
+    assert loaded.nonterminal_priority == strategy.nonterminal_priority
+    assert loaded.terminal_priority == strategy.terminal_priority
+    assert loaded.terminal_slack == strategy.terminal_slack
     assert loaded.early_chapel_trash == strategy.early_chapel_trash
     assert loaded.mid_chapel_trash == strategy.mid_chapel_trash
     assert loaded.late_chapel_trash == strategy.late_chapel_trash
@@ -1333,6 +1345,91 @@ def test_save_and_load_best_model(tmp_path):
         text = f.read()
     assert "BEST TACTIC SUMMARY" in text
     assert "42%" in text
+
+
+# ---------------------------------------------------------------------------
+# Terminal-density buy rule tests
+# ---------------------------------------------------------------------------
+
+def test_terminal_density_blocks_terminal_with_slack_0():
+    """With slack=0 and no extra action capacity, terminal is blocked."""
+    # Starting deck: 7 Copper + 3 Estate = 0 capacity, 0 terminals
+    # But 0 >= 0 + 0 is true, so Smithy should be blocked
+    state = _make_state_with_hand(["Copper"] * 4 + ["Silver"])
+    state.supply = _full_supply()
+    state.turn = 1
+    strategy = _make_strategy(
+        early_buy_priority=["Smithy", "Silver", "PASS"],
+        terminal_slack=0,
+    )
+    play_buy_phase(state, strategy)
+    # Smithy blocked (0 terminals >= 0 capacity + 0 slack), so buys Silver
+    bought = [c for c in state.discard if c not in []]
+    assert "Smithy" not in bought
+    assert "Silver" in bought
+
+
+def test_terminal_density_allows_terminal_with_slack_1():
+    """With slack=1 and no extra action capacity, first terminal is allowed."""
+    state = _make_state_with_hand(["Copper"] * 4 + ["Silver"])
+    state.supply = _full_supply()
+    state.turn = 1
+    strategy = _make_strategy(
+        early_buy_priority=["Smithy", "Silver", "PASS"],
+        terminal_slack=1,
+    )
+    play_buy_phase(state, strategy)
+    # 0 terminals < 0 capacity + 1 slack, so Smithy is allowed
+    bought = list(state.discard)
+    assert "Smithy" in bought
+
+
+def test_terminal_density_village_raises_capacity():
+    """Owning Village+Smithy with slack=1 allows a second Smithy."""
+    # Deck has 1 Village (capacity=1), 1 Smithy (terminal=1)
+    state = _make_state_with_hand(["Gold", "Silver", "Village"])
+    state.deck = ["Copper"] * 3 + ["Smithy"]
+    state.supply = _full_supply()
+    state.turn = 5
+    strategy = _make_strategy(
+        mid_buy_priority=["Smithy", "Silver", "PASS"],
+        terminal_slack=1,
+        transitions=Transitions(early_to_mid_turn=3, mid_to_late_provinces=4),
+    )
+    play_buy_phase(state, strategy)
+    # 1 terminal < 1 capacity + 1 slack = 2, so second Smithy allowed
+    assert "Smithy" in state.discard
+
+
+def test_terminal_density_blocks_second_terminal_with_slack_0():
+    """With 1 Village, 1 Smithy and slack=0, second terminal is blocked."""
+    state = _make_state_with_hand(["Gold", "Silver", "Village"])
+    state.deck = ["Copper"] * 3 + ["Smithy"]
+    state.supply = _full_supply()
+    state.turn = 5
+    strategy = _make_strategy(
+        mid_buy_priority=["Smithy", "Silver", "PASS"],
+        terminal_slack=0,
+        transitions=Transitions(early_to_mid_turn=3, mid_to_late_provinces=4),
+    )
+    play_buy_phase(state, strategy)
+    # 1 terminal >= 1 capacity + 0 slack, so Smithy blocked
+    assert "Smithy" not in state.discard
+    assert "Silver" in state.discard
+
+
+def test_throne_room_never_blocked_by_terminal_density():
+    """Throne Room is never counted as terminal and never blocked."""
+    state = _make_state_with_hand(["Copper"] * 4 + ["Silver"])
+    state.supply = _full_supply()
+    state.turn = 1
+    strategy = _make_strategy(
+        early_buy_priority=["Throne Room", "Silver", "PASS"],
+        terminal_slack=0,
+    )
+    play_buy_phase(state, strategy)
+    # Even with slack=0 and no capacity, Throne Room is allowed
+    assert "Throne Room" in state.discard
 
 
 # ---------------------------------------------------------------------------
@@ -1351,7 +1448,8 @@ def test_hall_of_fame_adds_member_when_threshold_met():
             # All strategies "win" at 60% — above 0.55 threshold
             results.append({
                 "win_rate": 0.6, "tie_rate": 0.1, "loss_rate": 0.3,
-                "mean_turns": 20.0, "avg_final_deck": {},
+                "mean_turns": 20.0, "mean_vp_margin": 2.0,
+                "mean_actions_per_turn": 1.0, "avg_final_deck": {},
             })
         return results
 
@@ -1386,7 +1484,8 @@ def test_hall_of_fame_respects_max_size():
         for _ in population:
             results.append({
                 "win_rate": 0.8, "tie_rate": 0.1, "loss_rate": 0.1,
-                "mean_turns": 20.0, "avg_final_deck": {},
+                "mean_turns": 20.0, "mean_vp_margin": 5.0,
+                "mean_actions_per_turn": 1.0, "avg_final_deck": {},
             })
         return results
 

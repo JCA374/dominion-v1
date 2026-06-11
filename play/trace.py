@@ -29,8 +29,8 @@ from core.engine import (
 )
 from core.strategy import (
     Strategy, load_strategy, big_money_strategy,
-    get_current_phase, get_buy_priority, get_action_priority,
-    get_chapel_trash_priority,
+    get_current_phase, get_buy_priority, get_nonterminal_priority,
+    get_terminal_priority, get_chapel_trash_priority,
 )
 
 
@@ -198,11 +198,16 @@ def _traced_action_tier(state: GameState, strategy: Strategy,
 
 def traced_action_phase(state: GameState, strategy: Strategy,
                         opponents: list[tuple[GameState, Strategy]] | None = None) -> list[str]:
-    """Play action phase following a single priority list."""
+    """Play action phase: non-terminals first, then terminals."""
     phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
-    priority = get_action_priority(strategy, phase)
+    nt_prio = get_nonterminal_priority(strategy)
+    t_prio = get_terminal_priority(strategy)
     lines = []
-    lines.extend(_traced_action_tier(state, strategy, priority, phase, opponents))
+    # Tier 1: non-terminals
+    lines.extend(_traced_action_tier(state, strategy, nt_prio, phase, opponents))
+    # Tier 2: terminals (only if actions remain)
+    if state.actions > 0:
+        lines.extend(_traced_action_tier(state, strategy, t_prio, phase, opponents))
     return lines
 
 
@@ -294,12 +299,21 @@ def traced_buy_phase(state: GameState, strategy: Strategy) -> list[str]:
     buy_priority = get_buy_priority(strategy, phase)
 
     buy_targets = strategy.buy_targets
-    if buy_targets:
-        owned: dict[str, int] = {}
-        for c in state.deck + state.hand + state.discard + state.play_area:
-            owned[c] = owned.get(c, 0) + 1
-    else:
-        owned = {}
+    owned: dict[str, int] = {}
+    for c in state.deck + state.hand + state.discard + state.play_area:
+        owned[c] = owned.get(c, 0) + 1
+
+    # Terminal-density rule
+    extra_action_capacity = 0
+    terminals_owned = 0
+    for card_name, count in owned.items():
+        if card_name not in ALL_CARDS:
+            continue
+        card = ALL_CARDS[card_name]
+        if card.card_type == CardType.ACTION:
+            extra_action_capacity += count * max(0, card.actions - 1)
+            if card.actions == 0 and card_name != "Throne Room":
+                terminals_owned += count
 
     bought_any = False
     while state.buys > 0:
@@ -314,17 +328,24 @@ def traced_buy_phase(state: GameState, strategy: Strategy) -> list[str]:
             if (card_name in state.supply
                     and state.supply[card_name] > 0
                     and ALL_CARDS[card_name].cost <= state.coins):
-                # Coin threshold check
-                if card_name == "Province" and state.coins > strategy.province_max_coins:
-                    continue
-                if card_name == "Duchy" and state.coins > strategy.duchy_max_coins:
-                    continue
                 if card_name in buy_targets:
                     if owned.get(card_name, 0) >= buy_targets[card_name]:
                         continue
+                # Terminal-density rule
+                card = ALL_CARDS[card_name]
+                if (card.card_type == CardType.ACTION
+                        and card.actions == 0
+                        and card_name != "Throne Room"
+                        and terminals_owned >= extra_action_capacity + strategy.terminal_slack):
+                    continue
                 cost = ALL_CARDS[card_name].cost
                 buy_card(state, card_name)
                 owned[card_name] = owned.get(card_name, 0) + 1
+                # Update terminal-density counts
+                if card.card_type == CardType.ACTION:
+                    extra_action_capacity += max(0, card.actions - 1)
+                    if card.actions == 0 and card_name != "Throne Room":
+                        terminals_owned += 1
                 target_str = ""
                 if card_name in buy_targets:
                     target_str = f" [{owned[card_name]}/{buy_targets[card_name]}]"
@@ -584,7 +605,7 @@ def _eval_vs_opponents(strategy: Strategy, opponents: list[tuple[Strategy, str]]
 
     # Header
     print(f"  {'Opponent':<16s} {'Win':>5s} {'Tie':>5s} {'Loss':>5s}"
-          f"  {'Turns':>5s}  {'VP±':>5s}  Final Deck (avg)")
+          f"  {'Turns':>5s}  {'VP±':>5s}  Action Cards (avg)")
     print(f"  {'─' * 78}")
 
     total_wins = 0
@@ -627,8 +648,10 @@ def _eval_vs_opponents(strategy: Strategy, opponents: list[tuple[Strategy, str]]
         total_ties += ties
         total_games += n
 
-        # Top 5 deck cards
+        # Top action cards in final deck
         avg_deck = sorted(deck_counts.items(), key=lambda x: -x[1])
+        avg_deck = [(name, count) for name, count in avg_deck
+                     if ALL_CARDS[name].card_type == CardType.ACTION and count / n >= 0.5]
         deck_str = ", ".join(f"{count/n:.0f}x{name}" for name, count in avg_deck[:6])
 
         print(f"  {opp_label:<16s} {wins/n:>4.0%} {ties/n:>5.0%} {losses/n:>5.0%}"

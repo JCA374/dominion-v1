@@ -130,7 +130,9 @@ def crossover(p1: Strategy, p2: Strategy, rng: random.Random) -> Strategy:
         early_buy_priority=order_crossover(p1.early_buy_priority, p2.early_buy_priority, rng),
         mid_buy_priority=order_crossover(p1.mid_buy_priority, p2.mid_buy_priority, rng),
         late_buy_priority=order_crossover(p1.late_buy_priority, p2.late_buy_priority, rng),
-        action_priority=order_crossover(p1.action_priority, p2.action_priority, rng),
+        nonterminal_priority=order_crossover(p1.nonterminal_priority, p2.nonterminal_priority, rng),
+        terminal_priority=order_crossover(p1.terminal_priority, p2.terminal_priority, rng),
+        terminal_slack=rng.choice([p1.terminal_slack, p2.terminal_slack]),
         early_chapel_trash=_crossover_chapel(p1.early_chapel_trash, p2.early_chapel_trash, rng),
         mid_chapel_trash=_crossover_chapel(p1.mid_chapel_trash, p2.mid_chapel_trash, rng),
         late_chapel_trash=_crossover_chapel(p1.late_chapel_trash, p2.late_chapel_trash, rng),
@@ -197,7 +199,10 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
     s.early_buy_priority = _mutate_list(s.early_buy_priority, rate, rng)
     s.mid_buy_priority = _mutate_list(s.mid_buy_priority, rate, rng)
     s.late_buy_priority = _mutate_list(s.late_buy_priority, rate, rng)
-    s.action_priority = _mutate_list(s.action_priority, rate, rng, allow_pass=False)
+    s.nonterminal_priority = _mutate_list(s.nonterminal_priority, rate, rng, allow_pass=False)
+    s.terminal_priority = _mutate_list(s.terminal_priority, rate, rng, allow_pass=False)
+    if rng.random() < rate:
+        s.terminal_slack = max(0, min(4, s.terminal_slack + rng.choice([-1, 1])))
     # Chapel trash: Curse always first, STOP always last, middle cards evolvable
     def _mutate_chapel(trash_list):
         middle = [c for c in trash_list if c not in ("Curse", "STOP")]
@@ -231,8 +236,8 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
     # Jitter buy targets (min 1 so every card remains purchasable)
     for card in list(s.buy_targets):
         if rng.random() < rate:
-            s.buy_targets[card] += rng.choice([-1, 0, 1])
-            s.buy_targets[card] = max(1, min(10, s.buy_targets[card]))
+            s.buy_targets[card] += rng.choice([-2, -1, 0, 1, 2])
+            s.buy_targets[card] = max(1, min(12, s.buy_targets[card]))
 
     # Occasionally add/remove a target for a kingdom card
     kingdom_cards = kingdom if kingdom is not None else KINGDOM_CARDS
@@ -241,7 +246,7 @@ def mutate(strategy: Strategy, rate: float, rng: random.Random,
         if card in s.buy_targets:
             del s.buy_targets[card]  # remove limit
         else:
-            s.buy_targets[card] = rng.randint(1, 4)  # add limit
+            s.buy_targets[card] = rng.randint(1, 8)  # add limit
 
     return s
 
@@ -280,6 +285,8 @@ def run_ga(config: dict) -> dict:
     hall_add_threshold = config.get("hall_add_threshold", 0.55)
     vp_margin_weight = config.get("vp_margin_weight", 0.0)
     engine_weight = config.get("engine_weight", 0.0)
+    engine_weight_end = config.get("engine_weight_end", engine_weight)
+    engine_anneal_gens = config.get("engine_anneal_gens", 300)
 
     tier2_count = min(config.get("tier2_count", 15), pop_size)  # top N re-evaluated in tier 2
     tier2_seeds = config.get("tier2_seeds", 400)      # seeds for tier 2 (× 2 = 800 games)
@@ -317,11 +324,15 @@ def run_ga(config: dict) -> dict:
             "generation", "best_win_rate", "mean_win_rate", "worst_win_rate",
             "early_to_mid_turn", "mid_to_late_provinces",
             "best_top3_early", "best_top3_mid", "best_top3_late",
-            "mean_turns",
+            "mean_turns", "mean_actions_per_turn",
         ])
 
     try:
         for gen in range(start_gen + 1, start_gen + generations + 1):
+            # Anneal engine weight over time
+            progress = min(1.0, (gen - start_gen) / max(1, engine_anneal_gens))
+            engine_weight_now = engine_weight + (engine_weight_end - engine_weight) * progress
+
             # Generate seeds for this generation
             seed_list = make_seed_list(games_per_eval, master_rng)
 
@@ -331,8 +342,8 @@ def run_ga(config: dict) -> dict:
 
             # Blended fitness: win rate + VP margin + speed bonus + engine bonus
             speed_weight = config.get("speed_weight", 0.0)
-            def _blended(r):
-                remaining = 1.0 - vp_margin_weight - speed_weight - engine_weight
+            def _blended(r, _ew=engine_weight_now):
+                remaining = 1.0 - vp_margin_weight - speed_weight - _ew
                 f = remaining * r["win_rate"]
                 if vp_margin_weight > 0:
                     margin_norm = max(0.0, min(1.0, (r["mean_vp_margin"] + 20) / 40))
@@ -340,9 +351,9 @@ def run_ga(config: dict) -> dict:
                 if speed_weight > 0:
                     speed_norm = max(0.0, min(1.0, (25 - r["mean_turns"]) / 10))
                     f += speed_weight * speed_norm
-                if engine_weight > 0:
-                    engine_norm = max(0.0, min(1.0, (r["mean_actions_per_turn"] - 0.5) / 2.5))
-                    f += engine_weight * engine_norm
+                if _ew > 0:
+                    engine_norm = max(0.0, min(1.0, (r["mean_actions_per_turn"] - 1.0) / 4.0))
+                    f += _ew * engine_norm
                 return f
             fitnesses = [_blended(r) for r in eval_results]
 
@@ -366,6 +377,7 @@ def run_ga(config: dict) -> dict:
             worst_fitness = min(fitnesses)
             best_strat = population[best_idx]
             best_turns = best_eval_result["mean_turns"]
+            best_apt = best_eval_result["mean_actions_per_turn"]
 
             # Log entry
             entry = {
@@ -379,6 +391,7 @@ def run_ga(config: dict) -> dict:
                 "best_top3_mid": best_strat.mid_buy_priority[:3],
                 "best_top3_late": best_strat.late_buy_priority[:3],
                 "mean_turns": best_turns,
+                "mean_actions_per_turn": best_apt,
             }
             log.append(entry)
 
@@ -391,6 +404,7 @@ def run_ga(config: dict) -> dict:
                 " > ".join(best_strat.mid_buy_priority[:3]),
                 " > ".join(best_strat.late_buy_priority[:3]),
                 f"{best_turns:.1f}",
+                f"{best_apt:.2f}",
             ])
             csv_file.flush()
 
@@ -406,7 +420,7 @@ def run_ga(config: dict) -> dict:
 
             line = (f"Gen {gen:3d} | best={best_fitness:5.0%}  mean={mean_fitness:5.0%}"
                     f"  worst={worst_fitness:5.0%} | turns={best_turns:4.1f}"
-                    f" | hall={len(hall)}"
+                    f"  apt={best_apt:.2f} | hall={len(hall)}"
                     f" | early→mid t{best_strat.transitions.early_to_mid_turn}"
                     f"  mid→late p{best_strat.transitions.mid_to_late_provinces}"
                     f"/t{best_strat.transitions.mid_to_late_turn}")
