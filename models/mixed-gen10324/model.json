@@ -1,0 +1,24 @@
+{
+  "protocol": 1,
+  "name": "mixed-gen10324",
+  "kind": "ga-strategy",
+  "file": "strategy.json",
+  "kingdom": [
+    "Chapel",
+    "Council Room",
+    "Festival",
+    "Gardens",
+    "Laboratory",
+    "Market",
+    "Merchant",
+    "Mine",
+    "Moneylender",
+    "Smithy",
+    "Throne Room",
+    "Village"
+  ],
+  "created": "2026-11-13",
+  "source": "models/gen_10324/strategy.json",
+  "description": "Early model trained on 12 cards incl. Gardens and Council Room.",
+  "trained_vs": "70% win / 5% tie / 37% loss (100 games vs best_model_v55)"
+}

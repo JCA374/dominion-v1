@@ -1,0 +1,190 @@
+{
+  "early_buy_priority": [
+    "Witch",
+    "Militia",
+    "Mine",
+    "Smithy",
+    "Chapel",
+    "Market",
+    "Silver",
+    "Province",
+    "Gold",
+    "Estate",
+    "Throne Room",
+    "Duchy",
+    "Moat",
+    "Copper",
+    "Laboratory",
+    "Village",
+    "PASS"
+  ],
+  "mid_buy_priority": [
+    "Witch",
+    "Province",
+    "Gold",
+    "Laboratory",
+    "Market",
+    "Silver",
+    "Throne Room",
+    "Moat",
+    "PASS",
+    "Smithy",
+    "Duchy",
+    "Chapel",
+    "Village",
+    "Militia",
+    "Estate",
+    "Mine",
+    "Copper"
+  ],
+  "late_buy_priority": [
+    "Copper",
+    "PASS",
+    "Province",
+    "Silver",
+    "Duchy",
+    "Throne Room",
+    "Estate",
+    "Smithy",
+    "Witch",
+    "Militia",
+    "Gold",
+    "Chapel",
+    "Moat",
+    "Village",
+    "Laboratory",
+    "Market",
+    "Mine"
+  ],
+  "end_buy_priority": [
+    "Province",
+    "Duchy",
+    "Estate",
+    "Market",
+    "Moat",
+    "Militia",
+    "Village",
+    "Witch",
+    "Chapel",
+    "Throne Room",
+    "Copper",
+    "Silver",
+    "Mine",
+    "Smithy",
+    "PASS",
+    "Gold",
+    "Laboratory"
+  ],
+  "early_nonterminal_priority": [
+    "Village",
+    "Laboratory",
+    "Market"
+  ],
+  "early_terminal_priority": [
+    "Chapel",
+    "Mine",
+    "Militia",
+    "Smithy",
+    "Throne Room",
+    "Witch",
+    "Moat"
+  ],
+  "mid_nonterminal_priority": [
+    "Laboratory",
+    "Market",
+    "Village"
+  ],
+  "mid_terminal_priority": [
+    "Witch",
+    "Militia",
+    "Chapel",
+    "Mine",
+    "Throne Room",
+    "Moat",
+    "Smithy"
+  ],
+  "late_nonterminal_priority": [
+    "Village",
+    "Laboratory",
+    "Market"
+  ],
+  "late_terminal_priority": [
+    "Throne Room",
+    "Witch",
+    "Moat",
+    "Mine",
+    "Smithy",
+    "Chapel",
+    "Militia"
+  ],
+  "end_nonterminal_priority": [
+    "Market",
+    "Village",
+    "Laboratory"
+  ],
+  "end_terminal_priority": [
+    "Militia",
+    "Smithy",
+    "Witch",
+    "Moat",
+    "Mine",
+    "Throne Room",
+    "Chapel"
+  ],
+  "early_chapel_trash": [
+    "Curse",
+    "Copper",
+    "Estate",
+    "STOP"
+  ],
+  "mid_chapel_trash": [
+    "Curse",
+    "Estate",
+    "Copper",
+    "STOP"
+  ],
+  "late_chapel_trash": [
+    "Curse",
+    "STOP"
+  ],
+  "end_chapel_trash": [
+    "Curse",
+    "STOP"
+  ],
+  "transitions": {
+    "early_to_mid_turn": 2,
+    "mid_to_late_provinces": 4,
+    "late_to_end_provinces": 4
+  },
+  "throne_room_priority": [
+    "Mine",
+    "Witch",
+    "Militia",
+    "Smithy",
+    "Chapel",
+    "Market",
+    "Laboratory",
+    "Village",
+    "Moat"
+  ],
+  "mine_trash_priority": [
+    "Silver",
+    "Copper"
+  ],
+  "chapel_max_trash": 4,
+  "buy_targets": {
+    "Market": 7,
+    "Militia": 10,
+    "Witch": 1,
+    "Smithy": 8,
+    "Mine": 1,
+    "Village": 5,
+    "Throne Room": 2,
+    "Laboratory": 3,
+    "Chapel": 5
+  },
+  "province_max_coins": 18,
+  "duchy_max_coins": 13,
+  "militia_coin_threshold": 8,
+  "avg_final_deck": null
+}

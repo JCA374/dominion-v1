@@ -1,0 +1,22 @@
+{
+  "protocol": 1,
+  "name": "k1-gen91439",
+  "kind": "ga-strategy",
+  "file": "strategy.json",
+  "kingdom": [
+    "Chapel",
+    "Festival",
+    "Laboratory",
+    "Market",
+    "Merchant",
+    "Mine",
+    "Moneylender",
+    "Smithy",
+    "Throne Room",
+    "Village"
+  ],
+  "created": "2026-11-13",
+  "source": "models/gen_91439/strategy.json",
+  "description": "KINGDOM1 snapshot, end of a long run (its hall of fame is in hall/).",
+  "trained_vs": "55% win / 4% tie / 41% loss (800 games vs hall(6))"
+}

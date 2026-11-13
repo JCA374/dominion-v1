@@ -1,0 +1,22 @@
+{
+  "protocol": 1,
+  "name": "k1-gen8938",
+  "kind": "ga-strategy",
+  "file": "strategy.json",
+  "kingdom": [
+    "Chapel",
+    "Festival",
+    "Laboratory",
+    "Market",
+    "Merchant",
+    "Mine",
+    "Moneylender",
+    "Smithy",
+    "Throne Room",
+    "Village"
+  ],
+  "created": "2026-11-13",
+  "source": "models/gen_8938/strategy.json",
+  "description": "KINGDOM1 snapshot.",
+  "trained_vs": "58% win / 6% tie / 36% loss (800 games vs hall(6))"
+}

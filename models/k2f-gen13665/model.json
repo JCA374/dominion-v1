@@ -1,0 +1,23 @@
+{
+  "protocol": 1,
+  "name": "k2f-gen13665",
+  "kind": "ga-strategy",
+  "file": "strategy.json",
+  "kingdom": [
+    "Chapel",
+    "Festival",
+    "Laboratory",
+    "Market",
+    "Militia",
+    "Mine",
+    "Moat",
+    "Smithy",
+    "Throne Room",
+    "Village",
+    "Witch"
+  ],
+  "created": "2026-11-13",
+  "source": "models/gen_13665/strategy.json",
+  "description": "KINGDOM2 plus Festival (11 cards).",
+  "trained_vs": "66% win / 2% tie / 31% loss (800 games vs hall(4))"
+}

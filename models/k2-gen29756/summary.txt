@@ -1,0 +1,63 @@
+============================================================
+  BEST TACTIC SUMMARY
+============================================================
+
+  Performance (800 games vs hall(6))
+  ────────────────────────────────────────
+  Win rate:  63% win / 2% tie / 35% loss
+  Avg game:  27.5 turns
+
+  Phase Timing
+  ────────────────────────────────────────
+  Early game: turns 1-2
+  Mid game:   turn 3+ while >4 Provinces remain
+  Late game:  4 or fewer Provinces left, >4 remaining
+  End game:   4 or fewer Provinces left
+
+  Early Phase — top buys: Witch > Militia > Mine > Smithy
+  ────────────────────────────────────────
+  Focus: action cards (Witch, Militia, Mine, Smithy)
+
+  Mid Phase — top buys: Witch > Province > Gold > Laboratory
+  ────────────────────────────────────────
+  Focus: action cards (Witch, Laboratory), then treasure (Gold), then victory (Province)
+  Stops buying after rank 9 (skips cheaper cards if top picks unaffordable)
+
+  Late Phase — top buys: Copper > Province > Silver > Duchy
+  ────────────────────────────────────────
+  Focus: treasure (Copper, Silver), then victory (Province, Duchy)
+  Stops buying after rank 2 (skips cheaper cards if top picks unaffordable)
+
+  End Phase — top buys: Province > Duchy > Estate > Market
+  ────────────────────────────────────────
+  Focus: action cards (Market), then victory (Province, Duchy, Estate)
+  Stops buying after rank 15 (skips cheaper cards if top picks unaffordable)
+
+  Action Play Order (non-terminals first, then terminals)
+  ────────────────────────────────────────
+  Early non-term: Village > Laboratory > Market
+  Early terminal: Chapel > Mine > Militia > Smithy > Throne Room > Witch
+  Mid non-term: Laboratory > Market > Village
+  Mid terminal: Witch > Militia > Chapel > Mine > Throne Room > Moat
+  Late non-term: Village > Laboratory > Market
+  Late terminal: Throne Room > Witch > Moat > Mine > Smithy > Chapel
+  End non-term: Market > Village > Laboratory
+  End terminal: Militia > Smithy > Witch > Moat > Mine > Throne Room
+
+  Chapel Trashing
+  ────────────────────────────────────────
+  Early: Curse > Copper > Estate (max 4/play)
+  Mid: Curse > Estate > Copper (max 4/play)
+  Late: Curse (max 4/play)
+  End: Curse (max 4/play)
+
+  Buy Targets (max copies)
+  ────────────────────────────────────────
+  Market: 7, Militia: 10, Witch: 1, Smithy: 8, Mine: 1, Village: 5, Throne Room: 2, Laboratory: 3, Chapel: 5
+
+  Key Insight
+  ────────────────────────────────────────
+  Builds an engine early with action cards, then
+  switches to victory cards at a moderate greening point.
+
+============================================================

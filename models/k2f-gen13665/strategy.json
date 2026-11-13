@@ -1,0 +1,157 @@
+{
+  "early_buy_priority": [
+    "Witch",
+    "Militia",
+    "Festival",
+    "Smithy",
+    "Silver",
+    "Throne Room",
+    "Moat",
+    "Laboratory",
+    "Village",
+    "Mine",
+    "Duchy",
+    "Chapel",
+    "Province",
+    "Copper",
+    "Gold",
+    "Estate",
+    "Market"
+  ],
+  "mid_buy_priority": [
+    "Witch",
+    "Province",
+    "Gold",
+    "Festival",
+    "Militia",
+    "Silver",
+    "Duchy",
+    "Smithy",
+    "Laboratory",
+    "Moat",
+    "PASS",
+    "Copper",
+    "Throne Room",
+    "Village",
+    "Market",
+    "Chapel",
+    "Estate",
+    "Mine"
+  ],
+  "late_buy_priority": [
+    "Province",
+    "Duchy",
+    "Estate",
+    "Smithy",
+    "Market",
+    "Militia",
+    "PASS",
+    "Chapel",
+    "Laboratory",
+    "Silver",
+    "Festival",
+    "Village",
+    "Gold",
+    "Mine",
+    "Copper",
+    "Throne Room",
+    "Witch",
+    "Moat"
+  ],
+  "early_nonterminal_priority": [
+    "Festival",
+    "Village",
+    "Laboratory",
+    "Market"
+  ],
+  "early_terminal_priority": [
+    "Militia",
+    "Witch",
+    "Throne Room",
+    "Moat",
+    "Chapel",
+    "Mine",
+    "Smithy"
+  ],
+  "mid_nonterminal_priority": [
+    "Festival",
+    "Village",
+    "Market",
+    "Laboratory"
+  ],
+  "mid_terminal_priority": [
+    "Witch",
+    "Militia",
+    "Moat",
+    "Smithy",
+    "Mine",
+    "Chapel",
+    "Throne Room"
+  ],
+  "late_nonterminal_priority": [
+    "Market",
+    "Laboratory",
+    "Village",
+    "Festival"
+  ],
+  "late_terminal_priority": [
+    "Militia",
+    "Witch",
+    "Mine",
+    "Smithy",
+    "Throne Room",
+    "Chapel",
+    "Moat"
+  ],
+  "early_chapel_trash": [
+    "Estate",
+    "Copper",
+    "STOP"
+  ],
+  "mid_chapel_trash": [
+    "Estate",
+    "Copper",
+    "STOP"
+  ],
+  "late_chapel_trash": [
+    "STOP"
+  ],
+  "transitions": {
+    "early_to_mid_turn": 2,
+    "mid_to_late_provinces": 7
+  },
+  "throne_room_priority": [
+    "Market",
+    "Mine",
+    "Moat",
+    "Witch",
+    "Village",
+    "Festival",
+    "Laboratory",
+    "Smithy",
+    "Militia",
+    "Chapel"
+  ],
+  "mine_trash_priority": [
+    "Silver",
+    "Copper"
+  ],
+  "chapel_max_trash": 4,
+  "buy_targets": {
+    "Witch": 2,
+    "Chapel": 1,
+    "Throne Room": 8,
+    "Market": 5,
+    "Village": 3,
+    "Laboratory": 8,
+    "Smithy": 4,
+    "Mine": 7,
+    "Militia": 2,
+    "Festival": 9,
+    "Moat": 1
+  },
+  "province_max_coins": 18,
+  "duchy_max_coins": 11,
+  "militia_coin_threshold": 6,
+  "avg_final_deck": null
+}

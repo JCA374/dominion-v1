@@ -1,0 +1,22 @@
+{
+  "protocol": 1,
+  "name": "k2-gen29756",
+  "kind": "ga-strategy",
+  "file": "strategy.json",
+  "kingdom": [
+    "Chapel",
+    "Laboratory",
+    "Market",
+    "Militia",
+    "Mine",
+    "Moat",
+    "Smithy",
+    "Throne Room",
+    "Village",
+    "Witch"
+  ],
+  "created": "2026-11-13",
+  "source": "models/gen_29756/strategy.json",
+  "description": "KINGDOM2 snapshot.",
+  "trained_vs": "63% win / 2% tie / 35% loss (800 games vs hall(6))"
+}

@@ -1,0 +1,54 @@
+============================================================
+  BEST TACTIC SUMMARY
+============================================================
+
+  Performance (800 games vs hall(4))
+  ────────────────────────────────────────
+  Win rate:  66% win / 2% tie / 31% loss
+  Avg game:  28.4 turns
+
+  Phase Timing
+  ────────────────────────────────────────
+  Early game: turns 1-2
+  Mid game:   turn 3+ while >7 Provinces remain
+  Late game:  7 or fewer Provinces left
+
+  Early Phase — top buys: Witch > Militia > Festival > Smithy
+  ────────────────────────────────────────
+  Focus: action cards (Witch, Militia, Festival, Smithy)
+
+  Mid Phase — top buys: Witch > Province > Gold > Festival
+  ────────────────────────────────────────
+  Focus: action cards (Witch, Festival), then treasure (Gold), then victory (Province)
+  Stops buying after rank 11 (skips cheaper cards if top picks unaffordable)
+
+  Late Phase — top buys: Province > Duchy > Estate > Smithy
+  ────────────────────────────────────────
+  Focus: action cards (Smithy), then victory (Province, Duchy, Estate)
+  Stops buying after rank 7 (skips cheaper cards if top picks unaffordable)
+
+  Action Play Order (non-terminals first, then terminals)
+  ────────────────────────────────────────
+  Early non-term: Festival > Village > Laboratory > Market
+  Early terminal: Militia > Witch > Throne Room > Moat > Chapel > Mine
+  Mid non-term: Festival > Village > Market > Laboratory
+  Mid terminal: Witch > Militia > Moat > Smithy > Mine > Chapel
+  Late non-term: Market > Laboratory > Village > Festival
+  Late terminal: Militia > Witch > Mine > Smithy > Throne Room > Chapel
+
+  Chapel Trashing
+  ────────────────────────────────────────
+  Early: Estate > Copper (max 4/play)
+  Mid: Estate > Copper (max 4/play)
+  Late: never trashes
+
+  Buy Targets (max copies)
+  ────────────────────────────────────────
+  Witch: 2, Chapel: 1, Throne Room: 8, Market: 5, Village: 3, Laboratory: 8, Smithy: 4, Mine: 7, Militia: 2, Festival: 9, Moat: 1
+
+  Key Insight
+  ────────────────────────────────────────
+  Builds an engine early with action cards, then
+  starts greening aggressively while many Provinces remain.
+
+============================================================

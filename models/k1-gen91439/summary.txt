@@ -1,0 +1,51 @@
+============================================================
+  BEST TACTIC SUMMARY
+============================================================
+
+  Performance (800 games vs hall(6))
+  ────────────────────────────────────────
+  Win rate:  55% win / 4% tie / 41% loss
+  Avg game:  17.9 turns
+
+  Phase Timing
+  ────────────────────────────────────────
+  Early game: turns 1-6
+  Mid game:   turn 7+ while >5 Provinces remain and turn <25
+  Late game:  5 or fewer Provinces left (until game end)
+
+  Early Phase — top buys: Market > Moneylender > Silver > Smithy
+  ────────────────────────────────────────
+  Focus: action cards (Market, Moneylender, Smithy), then treasure (Silver)
+  Stops buying after rank 4 (skips cheaper cards if top picks unaffordable)
+
+  Mid Phase — top buys: Laboratory > Merchant > Province > Gold
+  ────────────────────────────────────────
+  Focus: action cards (Laboratory, Merchant), then treasure (Gold), then victory (Province)
+  Stops buying after rank 9 (skips cheaper cards if top picks unaffordable)
+
+  Late Phase — top buys: Province > Duchy > Moneylender > Gold
+  ────────────────────────────────────────
+  Focus: action cards (Moneylender), then treasure (Gold), then victory (Province, Duchy)
+
+  Action Play Order (non-terminals first)
+  ────────────────────────────────────────
+  Non-terminals: Merchant > Festival > Village > Laboratory > Market
+  Terminals: Smithy > Moneylender > Chapel > Throne Room > Mine
+  Terminal slack: 3
+
+  Chapel Trashing
+  ────────────────────────────────────────
+  Early: Curse (max 4/play)
+  Mid: Curse > Estate > Copper (max 4/play)
+  Late: Curse (max 4/play)
+
+  Buy Targets (max copies)
+  ────────────────────────────────────────
+  Mine: 7, Moneylender: 1, Laboratory: 9, Festival: 4, Market: 10, Merchant: 7, Smithy: 5, Chapel: 12, Village: 3
+
+  Key Insight
+  ────────────────────────────────────────
+  Builds an engine early with action cards, then
+  switches to victory cards at a moderate greening point.
+
+============================================================

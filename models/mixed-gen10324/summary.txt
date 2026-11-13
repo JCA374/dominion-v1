@@ -1,0 +1,60 @@
+============================================================
+  BEST TACTIC SUMMARY
+============================================================
+
+  Performance (100 games vs best_model_v55)
+  ────────────────────────────────────────
+  Win rate:  70% win / 5% tie / 37% loss
+  Avg game:  31.0 turns
+
+  Phase Timing
+  ────────────────────────────────────────
+  Early game: turns 1-10
+  Mid game:   turn 11+ while >0 Provinces remain
+  Late game:  0 or fewer Provinces left
+
+  Early Phase — top buys: Council Room > Silver > Copper > Province
+  ────────────────────────────────────────
+  Focus: action cards (Council Room), then treasure (Silver, Copper), then victory (Province)
+  Stops buying after rank 14 (skips cheaper cards if top picks unaffordable)
+
+  Mid Phase — top buys: Gardens > Province > Duchy > Silver
+  ────────────────────────────────────────
+  Focus: treasure (Silver), then victory (Gardens, Province, Duchy)
+  Stops buying after rank 18 (skips cheaper cards if top picks unaffordable)
+
+  Late Phase — top buys: Chapel > Gold > Smithy > Silver
+  ────────────────────────────────────────
+  Focus: action cards (Chapel, Smithy), then treasure (Gold, Silver)
+  Stops buying after rank 13 (skips cheaper cards if top picks unaffordable)
+
+  Action Play Order
+  ────────────────────────────────────────
+  Mine > Chapel > Throne Room > Council Room > Smithy > Festival > Market > Laboratory > Merchant > Moneylender > Village
+
+  Chapel Trashing
+  ────────────────────────────────────────
+  Trashes: Copper (max 4/play)
+
+  Buy Targets (max copies)
+  ────────────────────────────────────────
+  Smithy: 3, Moneylender: 9, Village: 3, Market: 6, Laboratory: 4, Festival: 4, Mine: 7, Council Room: 4, Throne Room: 8, Merchant: 7, Chapel: 1
+
+  Key Insight
+  ────────────────────────────────────────
+  Builds an engine early with action cards, then
+  waits until very late to buy victory cards (lean deck).
+
+  Average Final Deck
+  ────────────────────────────────────────
+        Silver  16.3  ████████████████
+        Copper  13.7  ██████████████
+       Gardens   6.7  ███████
+         Duchy   5.8  ██████
+        Estate   5.5  ██████
+  Council Room   4.0  ████
+      Province   3.1  ███
+        Chapel   0.1  
+         Total  55.2
+
+============================================================

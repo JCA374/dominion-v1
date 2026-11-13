@@ -1,0 +1,148 @@
+{
+  "early_buy_priority": [
+    "Mine",
+    "Duchy",
+    "Smithy",
+    "Silver",
+    "Chapel",
+    "Festival",
+    "Copper",
+    "Estate",
+    "Laboratory",
+    "Moneylender",
+    "Throne Room",
+    "Province",
+    "Gold",
+    "Merchant",
+    "Market",
+    "Village",
+    "PASS"
+  ],
+  "mid_buy_priority": [
+    "Province",
+    "Gold",
+    "Market",
+    "Laboratory",
+    "Silver",
+    "Village",
+    "Mine",
+    "Merchant",
+    "Moneylender",
+    "PASS",
+    "Festival",
+    "Smithy",
+    "Chapel",
+    "Duchy",
+    "Estate",
+    "Copper",
+    "Throne Room"
+  ],
+  "late_buy_priority": [
+    "Province",
+    "Duchy",
+    "Estate",
+    "Silver",
+    "Merchant",
+    "Festival",
+    "Smithy",
+    "Chapel",
+    "Market",
+    "Gold",
+    "Mine",
+    "Moneylender",
+    "Throne Room",
+    "Copper",
+    "Laboratory",
+    "Village"
+  ],
+  "early_nonterminal_priority": [
+    "Festival",
+    "Laboratory",
+    "Market",
+    "Village",
+    "Merchant"
+  ],
+  "early_terminal_priority": [
+    "Throne Room",
+    "Smithy",
+    "Chapel",
+    "Moneylender",
+    "Mine"
+  ],
+  "mid_nonterminal_priority": [
+    "Festival",
+    "Market",
+    "Merchant",
+    "Village",
+    "Laboratory"
+  ],
+  "mid_terminal_priority": [
+    "Mine",
+    "Smithy",
+    "Moneylender",
+    "Throne Room",
+    "Chapel"
+  ],
+  "late_nonterminal_priority": [
+    "Village",
+    "Festival",
+    "Merchant",
+    "Laboratory",
+    "Market"
+  ],
+  "late_terminal_priority": [
+    "Throne Room",
+    "Mine",
+    "Chapel",
+    "Moneylender",
+    "Smithy"
+  ],
+  "early_chapel_trash": [
+    "Estate",
+    "Copper",
+    "STOP"
+  ],
+  "mid_chapel_trash": [
+    "Estate",
+    "Copper",
+    "STOP"
+  ],
+  "late_chapel_trash": [
+    "STOP"
+  ],
+  "transitions": {
+    "early_to_mid_turn": 2,
+    "mid_to_late_provinces": 4
+  },
+  "throne_room_priority": [
+    "Merchant",
+    "Smithy",
+    "Festival",
+    "Moneylender",
+    "Village",
+    "Market",
+    "Mine",
+    "Laboratory",
+    "Chapel"
+  ],
+  "mine_trash_priority": [
+    "Copper",
+    "Silver"
+  ],
+  "chapel_max_trash": 4,
+  "buy_targets": {
+    "Moneylender": 10,
+    "Chapel": 1,
+    "Laboratory": 4,
+    "Village": 2,
+    "Mine": 6,
+    "Festival": 3,
+    "Market": 1,
+    "Smithy": 10,
+    "Throne Room": 5,
+    "Merchant": 6
+  },
+  "province_max_coins": 17,
+  "duchy_max_coins": 13,
+  "avg_final_deck": null
+}

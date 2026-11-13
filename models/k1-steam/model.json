@@ -1,0 +1,22 @@
+{
+  "protocol": 1,
+  "name": "k1-steam",
+  "kind": "ga-strategy",
+  "file": "strategy.json",
+  "kingdom": [
+    "Chapel",
+    "Festival",
+    "Laboratory",
+    "Market",
+    "Merchant",
+    "Mine",
+    "Moneylender",
+    "Smithy",
+    "Throne Room",
+    "Village"
+  ],
+  "created": "2026-11-13",
+  "source": "dominion-v1 best_model @ 8444772",
+  "description": "The model the Steam autopilot played its first recorded games with (won 58-8 and 76-7 vs Very Easy AI). KINGDOM1.",
+  "trained_vs": "62% win / 7% tie / 32% loss (800 games vs hall(6))"
+}

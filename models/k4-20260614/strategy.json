@@ -1,0 +1,136 @@
+{
+  "early_buy_priority": [
+    "Witch",
+    "Province",
+    "Gold",
+    "Market",
+    "Moat",
+    "Silver",
+    "PASS",
+    "Merchant",
+    "Village",
+    "Moneylender",
+    "Duchy",
+    "Copper",
+    "Estate",
+    "Laboratory",
+    "Smithy",
+    "Chapel",
+    "Militia"
+  ],
+  "mid_buy_priority": [
+    "Moat",
+    "Moneylender",
+    "Chapel",
+    "Militia",
+    "Merchant",
+    "Province",
+    "Laboratory",
+    "PASS",
+    "Silver",
+    "Village",
+    "Gold",
+    "Duchy",
+    "Estate",
+    "Market",
+    "Smithy",
+    "Copper",
+    "Witch"
+  ],
+  "late_buy_priority": [
+    "Province",
+    "Duchy",
+    "Estate",
+    "Witch",
+    "Smithy",
+    "Merchant",
+    "Moat",
+    "Gold",
+    "PASS",
+    "Village",
+    "Silver",
+    "Laboratory",
+    "Moneylender",
+    "Chapel",
+    "Copper",
+    "Militia",
+    "Market"
+  ],
+  "nonterminal_priority": [
+    "Market",
+    "Laboratory",
+    "Village",
+    "Merchant"
+  ],
+  "terminal_priority": [
+    "Witch",
+    "Moneylender",
+    "Smithy",
+    "Chapel",
+    "Moat",
+    "Militia"
+  ],
+  "terminal_slack": 3,
+  "early_chapel_trash": [
+    "Curse",
+    "Copper",
+    "Estate",
+    "STOP"
+  ],
+  "mid_chapel_trash": [
+    "Curse",
+    "Estate",
+    "Copper",
+    "STOP"
+  ],
+  "late_chapel_trash": [
+    "Curse",
+    "STOP"
+  ],
+  "transitions": {
+    "early_to_mid_turn": 15,
+    "mid_to_late_provinces": 8,
+    "mid_to_late_turn": 12
+  },
+  "throne_room_priority": [
+    "Moneylender",
+    "Chapel",
+    "Witch",
+    "Moat",
+    "Laboratory",
+    "Militia",
+    "Market",
+    "Smithy",
+    "Merchant",
+    "Village"
+  ],
+  "mine_trash_priority": [
+    "Silver",
+    "Copper"
+  ],
+  "chapel_max_trash": 4,
+  "buy_targets": {
+    "Market": 6,
+    "Laboratory": 6,
+    "Witch": 2,
+    "Moneylender": 3,
+    "Smithy": 11,
+    "Merchant": 6,
+    "Militia": 12,
+    "Chapel": 8,
+    "Moat": 1,
+    "Village": 1
+  },
+  "avg_final_deck": {
+    "Copper": 7.0,
+    "Estate": 6.8,
+    "Duchy": 5.7,
+    "Province": 5.4,
+    "Silver": 4.5,
+    "Gold": 3.4,
+    "Witch": 2.0,
+    "Market": 1.8,
+    "Merchant": 1.4,
+    "Moat": 1.0
+  }
+}

@@ -1,0 +1,66 @@
+============================================================
+  BEST TACTIC SUMMARY
+============================================================
+
+  Performance (800 games vs hall(3))
+  ────────────────────────────────────────
+  Win rate:  60% win / 7% tie / 34% loss
+  Avg game:  21.1 turns
+
+  Phase Timing
+  ────────────────────────────────────────
+  Early game: turns 1-8
+  Mid game:   turn 9+ while >5 Provinces remain
+  Late game:  5 or fewer Provinces left
+
+  Early Phase — top buys: Gold > Smithy > Silver > Village
+  ────────────────────────────────────────
+  Focus: action cards (Smithy, Village), then treasure (Gold, Silver)
+  Stops buying after rank 4 (skips cheaper cards if top picks unaffordable)
+
+  Mid Phase — top buys: Province > Gold > Market > Festival
+  ────────────────────────────────────────
+  Focus: action cards (Market, Festival), then treasure (Gold), then victory (Province)
+  Stops buying after rank 6 (skips cheaper cards if top picks unaffordable)
+
+  Late Phase — top buys: Province > Duchy > Estate > Market
+  ────────────────────────────────────────
+  Focus: action cards (Market), then victory (Province, Duchy, Estate)
+
+  Action Play Order (non-terminals first, then terminals)
+  ────────────────────────────────────────
+  Early non-term: Market > Village > Merchant > Festival > Laboratory
+  Early terminal: Chapel > Moneylender > Throne Room > Mine > Smithy
+  Mid non-term: Village > Merchant > Laboratory > Market > Festival
+  Mid terminal: Mine > Smithy > Chapel > Moneylender > Throne Room
+  Late non-term: Laboratory > Festival > Merchant > Market > Village
+  Late terminal: Chapel > Moneylender > Mine > Smithy > Throne Room
+
+  Chapel Trashing
+  ────────────────────────────────────────
+  Early: Estate > Copper (max 4/play)
+  Mid: Estate > Copper (max 4/play)
+  Late: never trashes
+
+  Buy Targets (max copies)
+  ────────────────────────────────────────
+  Chapel: 3, Mine: 1, Smithy: 1, Throne Room: 9, Moneylender: 6, Festival: 2, Market: 4, Laboratory: 3, Village: 7, Merchant: 2
+
+  Key Insight
+  ────────────────────────────────────────
+  Builds an engine early with action cards, then
+  switches to victory cards at a moderate greening point.
+
+  Average Final Deck
+  ────────────────────────────────────────
+        Copper   7.6  ████████
+      Province   6.3  ██████
+          Gold   5.4  █████
+        Estate   4.3  ████
+        Silver   4.0  ████
+         Duchy   2.5  ██
+        Smithy   1.0  █
+        Market   0.7  █
+         Total  31.8
+
+============================================================

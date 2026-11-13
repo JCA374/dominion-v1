@@ -1,0 +1,58 @@
+============================================================
+  BEST TACTIC SUMMARY
+============================================================
+
+  Performance (800 games vs hall(6))
+  ────────────────────────────────────────
+  Win rate:  67% win / 2% tie / 32% loss
+  Avg game:  27.9 turns
+
+  Phase Timing
+  ────────────────────────────────────────
+  Early game: turns 1-12
+  Mid game:   turn 13+ while >7 Provinces remain and turn <20
+  Late game:  7 or fewer Provinces left, >4 remaining
+  End game:   4 or fewer Provinces left
+
+  Early Phase — top buys: Witch > Gold > Laboratory > Militia
+  ────────────────────────────────────────
+  Focus: action cards (Witch, Laboratory, Militia), then treasure (Gold)
+  Stops buying after rank 8 (skips cheaper cards if top picks unaffordable)
+
+  Mid Phase — top buys: Province > Gold > Silver > Witch
+  ────────────────────────────────────────
+  Focus: action cards (Witch), then treasure (Gold, Silver), then victory (Province)
+  Stops buying after rank 4 (skips cheaper cards if top picks unaffordable)
+
+  Late Phase — top buys: Province > Duchy > Estate > Mine
+  ────────────────────────────────────────
+  Focus: action cards (Mine), then victory (Province, Duchy, Estate)
+
+  End Phase — top buys: Province > Duchy > Estate > Moat
+  ────────────────────────────────────────
+  Focus: action cards (Moat), then victory (Province, Duchy, Estate)
+
+  Action Play Order
+  ────────────────────────────────────────
+  Early: Laboratory > Market > Village > Smithy > Witch > Militia > Moat > Chapel
+  Mid: Market > Laboratory > Chapel > Witch > Smithy > Militia > Moat > Village
+  Late: Laboratory > Witch > Chapel > Village > Smithy > Militia > Throne Room > Market
+  End: Throne Room > Laboratory > Market > Village > Smithy > Militia > Witch > Moat
+
+  Chapel Trashing
+  ────────────────────────────────────────
+  Early: Curse (max 4/play)
+  Mid: Curse (max 4/play)
+  Late: Curse (max 4/play)
+  End: Curse (max 4/play)
+
+  Buy Targets (max copies)
+  ────────────────────────────────────────
+  Village: 1, Smithy: 4, Witch: 2, Mine: 4, Throne Room: 1, Market: 8, Militia: 1
+
+  Key Insight
+  ────────────────────────────────────────
+  Builds an engine early with action cards, then
+  starts greening aggressively while many Provinces remain.
+
+============================================================

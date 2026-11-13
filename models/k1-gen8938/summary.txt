@@ -1,0 +1,53 @@
+============================================================
+  BEST TACTIC SUMMARY
+============================================================
+
+  Performance (800 games vs hall(6))
+  ────────────────────────────────────────
+  Win rate:  58% win / 6% tie / 36% loss
+  Avg game:  20.0 turns
+
+  Phase Timing
+  ────────────────────────────────────────
+  Early game: turns 1-2
+  Mid game:   turn 3+ while >4 Provinces remain
+  Late game:  4 or fewer Provinces left
+
+  Early Phase — top buys: Mine > Duchy > Smithy > Silver
+  ────────────────────────────────────────
+  Focus: action cards (Mine, Smithy), then treasure (Silver), then victory (Duchy)
+
+  Mid Phase — top buys: Province > Gold > Market > Laboratory
+  ────────────────────────────────────────
+  Focus: action cards (Market, Laboratory), then treasure (Gold), then victory (Province)
+  Stops buying after rank 10 (skips cheaper cards if top picks unaffordable)
+
+  Late Phase — top buys: Province > Duchy > Estate > Silver
+  ────────────────────────────────────────
+  Focus: treasure (Silver), then victory (Province, Duchy, Estate)
+
+  Action Play Order (non-terminals first, then terminals)
+  ────────────────────────────────────────
+  Early non-term: Festival > Laboratory > Market > Village > Merchant
+  Early terminal: Throne Room > Smithy > Chapel > Moneylender > Mine
+  Mid non-term: Festival > Market > Merchant > Village > Laboratory
+  Mid terminal: Mine > Smithy > Moneylender > Throne Room > Chapel
+  Late non-term: Village > Festival > Merchant > Laboratory > Market
+  Late terminal: Throne Room > Mine > Chapel > Moneylender > Smithy
+
+  Chapel Trashing
+  ────────────────────────────────────────
+  Early: Estate > Copper (max 4/play)
+  Mid: Estate > Copper (max 4/play)
+  Late: never trashes
+
+  Buy Targets (max copies)
+  ────────────────────────────────────────
+  Moneylender: 10, Chapel: 1, Laboratory: 4, Village: 2, Mine: 6, Festival: 3, Market: 1, Smithy: 10, Throne Room: 5, Merchant: 6
+
+  Key Insight
+  ────────────────────────────────────────
+  Builds an engine early with action cards, then
+  switches to victory cards at a moderate greening point.
+
+============================================================

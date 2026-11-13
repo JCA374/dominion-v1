@@ -1,0 +1,22 @@
+{
+  "protocol": 1,
+  "name": "k2-gen8563",
+  "kind": "ga-strategy",
+  "file": "strategy.json",
+  "kingdom": [
+    "Chapel",
+    "Laboratory",
+    "Market",
+    "Militia",
+    "Mine",
+    "Moat",
+    "Smithy",
+    "Throne Room",
+    "Village",
+    "Witch"
+  ],
+  "created": "2026-11-13",
+  "source": "models/gen_8563/strategy.json",
+  "description": "KINGDOM2 snapshot (Witch/Militia/Moat, Throne Room, Mine).",
+  "trained_vs": "67% win / 2% tie / 32% loss (800 games vs hall(6))"
+}
