@@ -1436,7 +1436,7 @@ def test_throne_room_never_blocked_by_terminal_density():
 # Hall of fame tests
 # ---------------------------------------------------------------------------
 
-def test_hall_of_fame_adds_member_when_threshold_met():
+def test_hall_of_fame_adds_member_when_threshold_met(tmp_path):
     """GA adds strategy to hall when win rate >= hall_add_threshold."""
     from unittest.mock import patch
     from ga.ga import run_ga
@@ -1466,14 +1466,15 @@ def test_hall_of_fame_adds_member_when_threshold_met():
             "kingdom": KINGDOM_CARDS,
             "hall_add_threshold": 0.55,
             "hall_max_size": 6,
-            "csv_path": "/tmp/test_hall.csv",
+            "csv_path": str(tmp_path / "log.csv"),
+            "best_model_dir": str(tmp_path / "model"),
         })
 
     # Hall should have grown beyond the initial Big Money member
     assert len(result["hall"]) >= 2
 
 
-def test_hall_of_fame_respects_max_size():
+def test_hall_of_fame_respects_max_size(tmp_path):
     """Hall of fame does not exceed hall_max_size."""
     from unittest.mock import patch
     from ga.ga import run_ga
@@ -1502,7 +1503,8 @@ def test_hall_of_fame_respects_max_size():
             "kingdom": KINGDOM_CARDS,
             "hall_add_threshold": 0.55,
             "hall_max_size": 3,
-            "csv_path": "/tmp/test_hall_max.csv",
+            "csv_path": str(tmp_path / "log.csv"),
+            "best_model_dir": str(tmp_path / "model"),
         })
 
     # Hall should not exceed max size
