@@ -22,15 +22,15 @@
     "Village",
     "Market",
     "Laboratory",
-    "Festival",
     "Merchant"
   ],
   "terminal_priority": [
     "Smithy",
     "Chapel",
-    "Throne Room",
-    "Mine",
-    "Moneylender"
+    "Moneylender",
+    "Moat",
+    "Militia",
+    "Witch"
   ],
   "terminal_slack": 1,
   "early_chapel_trash": [
@@ -52,11 +52,12 @@
     "Smithy",
     "Market",
     "Laboratory",
-    "Festival",
     "Chapel",
-    "Mine",
     "Moneylender",
-    "Merchant"
+    "Merchant",
+    "Moat",
+    "Militia",
+    "Witch"
   ],
   "mine_trash_priority": [
     "Copper",

@@ -8,6 +8,7 @@ import random
 from copy import deepcopy
 from dataclasses import asdict
 
+import math
 from core.cards import BUYABLE_CARDS, ACTION_CARDS, KINGDOM_CARDS
 from ga.fitness import (evaluate_population_vs_hall, make_seed_list)
 import json
@@ -446,16 +447,40 @@ def run_ga(config: dict) -> dict:
             if (new_best and best_fitness >= hall_add_threshold
                     and gen < start_gen + generations):
                 new_member = deepcopy(overall_best_strategy)
-                hall.append(new_member)
-                if len(hall) > hall_max_size:
-                    # Remove oldest non-BM member (index 1, since 0 is Big Money)
-                    hall.pop(1)
-                overall_best_fitness = -1.0  # reset so GA keeps improving vs new hall
-                print(f"  >>> Added to hall of fame (hall={len(hall)}, "
-                      f"win_rate={best_fitness:.0%}) <<<")
+                # Diversity check: compare action card distributions in avg final deck
+                candidate_deck = best_eval_result.get("avg_final_deck") or {}
+                too_similar = False
+                for existing in hall:
+                    existing_deck = getattr(existing, "_hall_deck", None)
+                    if existing_deck is None:
+                        continue
+                    # Cosine similarity on action card counts
+                    all_cards = set(list(candidate_deck) + list(existing_deck))
+                    action_cards = [c for c in all_cards if c in ACTION_CARDS]
+                    if not action_cards:
+                        continue
+                    dot = sum(candidate_deck.get(c, 0) * existing_deck.get(c, 0) for c in action_cards)
+                    mag_a = math.sqrt(sum(candidate_deck.get(c, 0) ** 2 for c in action_cards))
+                    mag_b = math.sqrt(sum(existing_deck.get(c, 0) ** 2 for c in action_cards))
+                    if mag_a > 0 and mag_b > 0:
+                        similarity = dot / (mag_a * mag_b)
+                        if similarity > 0.95:
+                            too_similar = True
+                            break
+                if too_similar:
+                    print(f"  --- Skipped hall add (deck too similar, cosine={similarity:.3f}) ---")
+                else:
+                    new_member._hall_deck = candidate_deck
+                    hall.append(new_member)
+                    if len(hall) > hall_max_size:
+                        # Remove oldest non-BM member (index 1, since 0 is Big Money)
+                        hall.pop(1)
+                    overall_best_fitness = -1.0  # reset so GA keeps improving vs new hall
+                    print(f"  >>> Added to hall of fame (hall={len(hall)}, "
+                          f"win_rate={best_fitness:.0%}) <<<")
 
-                # Save hall to disk
-                _save_hall(hall, best_model_dir)
+                    # Save hall to disk
+                    _save_hall(hall, best_model_dir)
 
             # Don't evolve after the last generation
             if gen == start_gen + generations:

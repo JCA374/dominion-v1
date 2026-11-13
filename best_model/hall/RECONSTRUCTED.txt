@@ -1,0 +1,4 @@
+This hall was rebuilt on 2026-11-13 after a test run overwrote it (tests now use tmp dirs).
+Method: Big Money(KINGDOM4) + replay of the GA's hall-add rule (cosine<=0.95 on avg_final_deck, max 6)
+over the KINGDOM4 gen_* snapshots. Members: ['BM', 44356, 44358, 44857, 46577, 49009]
+It matches the lost hall closely but not necessarily exactly (the 0.55 win-rate gate could not be replayed).

@@ -2,50 +2,65 @@
   BEST TACTIC SUMMARY
 ============================================================
 
-  Performance (800 games vs hall(6))
+  Performance (200 games vs hall(6))
   ────────────────────────────────────────
-  Win rate:  62% win / 7% tie / 32% loss
-  Avg game:  21.8 turns
+  Win rate:  53% win / 6% tie / 41% loss
+  Avg game:  28.6 turns
 
   Phase Timing
   ────────────────────────────────────────
-  Early game: turns 1-2
-  Mid game:   turn 3+ while >2 Provinces remain and turn <16
-  Late game:  2 or fewer Provinces left (until game end)
+  Early game: turns 1-15
+  Mid game:   turn 16+ while >8 Provinces remain and turn <12
+  Late game:  8 or fewer Provinces left (until game end)
 
-  Early Phase — top buys: Smithy > Duchy > Silver > Merchant
+  Early Phase — top buys: Witch > Province > Gold > Market
   ────────────────────────────────────────
-  Focus: action cards (Smithy, Merchant), then treasure (Silver), then victory (Duchy)
-  Stops buying after rank 5 (skips cheaper cards if top picks unaffordable)
-
-  Mid Phase — top buys: Province > Gold > Silver > Village
-  ────────────────────────────────────────
-  Focus: action cards (Village), then treasure (Gold, Silver), then victory (Province)
+  Focus: action cards (Witch, Market), then treasure (Gold), then victory (Province)
   Stops buying after rank 7 (skips cheaper cards if top picks unaffordable)
 
-  Late Phase — top buys: Province > Duchy > Moneylender > Estate
+  Mid Phase — top buys: Moat > Moneylender > Chapel > Militia
   ────────────────────────────────────────
-  Focus: action cards (Moneylender), then victory (Province, Duchy, Estate)
+  Focus: action cards (Moat, Moneylender, Chapel, Militia)
+  Stops buying after rank 8 (skips cheaper cards if top picks unaffordable)
+
+  Late Phase — top buys: Province > Duchy > Estate > Witch
+  ────────────────────────────────────────
+  Focus: action cards (Witch), then victory (Province, Duchy, Estate)
+  Stops buying after rank 9 (skips cheaper cards if top picks unaffordable)
 
   Action Play Order (non-terminals first)
   ────────────────────────────────────────
-  Non-terminals: Merchant > Market > Village > Festival > Laboratory
-  Terminals: Throne Room > Smithy > Moneylender > Chapel > Mine
-  Terminal slack: 1
+  Non-terminals: Market > Laboratory > Village > Merchant
+  Terminals: Witch > Moneylender > Smithy > Chapel > Moat > Militia
+  Terminal slack: 3
 
   Chapel Trashing
   ────────────────────────────────────────
-  Early: Curse (max 4/play)
-  Mid: Curse > Copper > Estate (max 4/play)
+  Early: Curse > Copper > Estate (max 4/play)
+  Mid: Curse > Estate > Copper (max 4/play)
   Late: Curse (max 4/play)
 
   Buy Targets (max copies)
   ────────────────────────────────────────
-  Moneylender: 7, Festival: 5, Merchant: 5, Laboratory: 10, Mine: 2, Market: 3, Chapel: 5, Throne Room: 4, Smithy: 12, Village: 1
+  Market: 6, Laboratory: 6, Witch: 2, Moneylender: 3, Smithy: 11, Merchant: 6, Militia: 12, Chapel: 8, Moat: 1, Village: 1
 
   Key Insight
   ────────────────────────────────────────
   Builds an engine early with action cards, then
-  waits until very late to buy victory cards (lean deck).
+  starts greening aggressively while many Provinces remain.
+
+  Average Final Deck
+  ────────────────────────────────────────
+        Copper   7.0  ███████
+        Estate   6.8  ███████
+         Duchy   5.7  ██████
+      Province   5.4  █████
+        Silver   4.5  ████
+          Gold   3.4  ███
+         Witch   2.0  ██
+        Market   1.8  ██
+      Merchant   1.4  █
+          Moat   1.0  █
+         Total  39.0
 
 ============================================================

@@ -34,7 +34,10 @@ KINGDOM2        = ["Village", "Smithy", "Market", "Laboratory", "Chapel",
 KINGDOM3        = ["Village", "Smithy", "Market", "Laboratory", "Festival",
                    "Council Room", "Merchant", "Moat", "Chapel", "Throne Room"]
 # Active kingdom for training
-KINGDOM         = KINGDOM1
+KINGDOM4        = ["Village", "Smithy", "Market", "Laboratory", "Chapel",
+                   "Moneylender", "Merchant", "Moat", "Militia", "Witch"]
+# Active kingdom for training
+KINGDOM         = KINGDOM4
 HALL_MAX_SIZE   = 6    # Maximum hall of fame opponents
 HALL_ADD_THRESHOLD = 0.55  # Add to hall when win rate exceeds this
 VP_MARGIN_WEIGHT     = 0.30  # Blend VP margin into fitness (0=win rate only, 1=margin only)
