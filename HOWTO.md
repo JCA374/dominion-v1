@@ -179,12 +179,26 @@ viz/                Visualization
   plotting.py       Fitness/transition/heatmap plots (4-phase)
   plot_evolution.py Interactive Plotly chart of buy priority evolution
 
+policy/             Stable interface for players (Steam autopilot) — see docs/PROTOCOL.md
+  protocol.py       Request/answer format, observation, answer checking
+  ga_policy.py      Plays a GA strategy.json with the training engine's own rules
+  registry.py       models/<name>/model.json, load_policy(), models/DEFAULT
+  release.py        python -m policy.release best_model <name>
+  check.py          python -m policy.check [name ...]  (conformance)
+  serve.py, client.py  the same protocol over a JSON-lines pipe
+
+models/             Released, immutable models (model.json + strategy.json)
+best_model/         Live output of the current training run
+
 c/                  C engine source
   dominion.c        C game engine — fast evaluation for GA training (~50x faster)
   Makefile          Builds dominion.so
 
 tests/
   test_smoke.py     Smoke tests for all components
+  test_policy.py    Protocol, registry and released-model conformance
+
+docs/               PROTOCOL.md, REPORT.md, baseline.md, plans/
 ```
 
 Root-level entry scripts (`train.py`, `play.py`, `gui.py`, `trace.py`) delegate
