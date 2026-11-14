@@ -185,6 +185,7 @@ policy/             Stable interface for players (Steam autopilot) — see docs/
   registry.py       models/<name>/model.json, load_policy(), models/DEFAULT
   release.py        python -m policy.release best_model <name>
   check.py          python -m policy.check [name ...]  (conformance)
+  bench.py          python -m policy.bench [name ...]  (strength vs fixed bots on Steam-like kingdoms)
   serve.py, client.py  the same protocol over a JSON-lines pipe
 
 models/             Released, immutable models (model.json + strategy.json)

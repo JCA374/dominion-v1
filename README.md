@@ -22,6 +22,7 @@ model anywhere else, release it:
 ```bash
 python -m policy.release best_model k4-gen52000 --description "..."   # --default to make it the default
 python -m policy.check                                                # every released model
+python -m policy.bench [name ...]       # score vs Big Money, Smithy-BM, Witch-BM on random Steam-like kingdoms
 ```
 
 `models/<name>/` then holds an immutable `model.json` (kind, training kingdom,

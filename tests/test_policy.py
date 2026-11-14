@@ -106,3 +106,16 @@ def test_subprocess_policy_matches_in_process(tmp_path):
         assert check(remote) == []
     finally:
         remote.close()
+
+
+def test_bench_reference_rows():
+    """policy.bench: Big Money scores 50% against itself and loses to Smithy-BM and Witch-BM."""
+    from core.strategy import big_money_strategy
+    from policy.bench import bench, steam_kingdoms
+
+    r = bench(big_money_strategy(), None, n_kingdoms=10, n_seeds=10)
+    assert r["Big Money"]["steam"]["score"] == 0.5
+    assert r["Smithy-BM"]["steam"]["score"] < 0.4
+    assert r["Witch-BM"]["steam"]["score"] < 0.3
+    assert all("Witch" in k for k in steam_kingdoms(20, 1, must="Witch"))
+    assert steam_kingdoms(5, 1) == steam_kingdoms(5, 1)   # same kingdoms every run
