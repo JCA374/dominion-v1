@@ -10,7 +10,7 @@ plays every member on that exact kingdom against the benchmark bots that fit it 
 plus Smithy-BM / Witch-BM when Smithy / Witch are dealt), on the C engine, and the best
 member plays the whole game. Members play as the player will let them: cards in
 policy.protocol.NO_REQUEST_YET are never bought, in the trial games too, so the choice is
-made for the game the member will really play. About 0.5 s per kingdom.
+made for the game the member will really play. About 1 s per kingdom.
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from policy.protocol import NO_REQUEST_YET, PROTOCOL_VERSION
 from policy.registry import MODELS_DIR, ROOT
 
 KIND = "ga-portfolio"
-TRIAL_SEEDS = 40      # seeds per bot (x2 seats) in the trial games
+TRIAL_SEEDS = 120     # seeds per bot (x2 seats) in the trial games (40: -0.7 points)
 
 
 def members(manifest: dict) -> dict[str, Strategy]:

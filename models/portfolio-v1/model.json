@@ -1,0 +1,268 @@
+{
+  "protocol": 1,
+  "name": "portfolio-v1",
+  "kind": "ga-portfolio",
+  "kingdom": [
+    "Artisan",
+    "Bandit",
+    "Bureaucrat",
+    "Cellar",
+    "Chapel",
+    "Council Room",
+    "Festival",
+    "Gardens",
+    "Harbinger",
+    "Laboratory",
+    "Library",
+    "Market",
+    "Merchant",
+    "Militia",
+    "Mine",
+    "Moat",
+    "Moneylender",
+    "Poacher",
+    "Remodel",
+    "Sentry",
+    "Smithy",
+    "Throne Room",
+    "Vassal",
+    "Village",
+    "Witch",
+    "Workshop"
+  ],
+  "key_cards": {},
+  "members": [
+    {
+      "name": "generalist",
+      "file": "members/generalist.json",
+      "must": [],
+      "banned": [],
+      "val_score": 0.7119,
+      "generations": 500
+    },
+    {
+      "name": "generalist-safe",
+      "file": "members/generalist-safe.json",
+      "must": [],
+      "banned": [
+        "Artisan",
+        "Cellar",
+        "Harbinger",
+        "Library",
+        "Poacher",
+        "Remodel",
+        "Sentry",
+        "Vassal",
+        "Workshop"
+      ],
+      "val_score": 0.7165,
+      "generations": 500
+    },
+    {
+      "name": "witch",
+      "file": "members/witch.json",
+      "must": [
+        "Witch"
+      ],
+      "banned": [],
+      "val_score": 0.8378,
+      "generations": 500
+    },
+    {
+      "name": "militia",
+      "file": "members/militia.json",
+      "must": [
+        "Militia"
+      ],
+      "banned": [],
+      "val_score": 0.7744,
+      "generations": 500
+    },
+    {
+      "name": "smithy",
+      "file": "members/smithy.json",
+      "must": [
+        "Smithy"
+      ],
+      "banned": [],
+      "val_score": 0.7046,
+      "generations": 500
+    },
+    {
+      "name": "laboratory",
+      "file": "members/laboratory.json",
+      "must": [
+        "Laboratory"
+      ],
+      "banned": [],
+      "val_score": 0.6504,
+      "generations": 500
+    },
+    {
+      "name": "council-room",
+      "file": "members/council-room.json",
+      "must": [
+        "Council Room"
+      ],
+      "banned": [],
+      "val_score": 0.7017,
+      "generations": 500
+    },
+    {
+      "name": "library",
+      "file": "members/library.json",
+      "must": [
+        "Library"
+      ],
+      "banned": [],
+      "val_score": 0.6579,
+      "generations": 500
+    },
+    {
+      "name": "chapel",
+      "file": "members/chapel.json",
+      "must": [
+        "Chapel"
+      ],
+      "banned": [],
+      "val_score": 0.6626,
+      "generations": 500
+    },
+    {
+      "name": "market",
+      "file": "members/market.json",
+      "must": [
+        "Market"
+      ],
+      "banned": [],
+      "val_score": 0.7294,
+      "generations": 500
+    },
+    {
+      "name": "festival",
+      "file": "members/festival.json",
+      "must": [
+        "Festival"
+      ],
+      "banned": [],
+      "val_score": 0.6464,
+      "generations": 500
+    },
+    {
+      "name": "bandit",
+      "file": "members/bandit.json",
+      "must": [
+        "Bandit"
+      ],
+      "banned": [],
+      "val_score": 0.709,
+      "generations": 500
+    },
+    {
+      "name": "gardens",
+      "file": "members/gardens.json",
+      "must": [
+        "Gardens",
+        "Workshop"
+      ],
+      "banned": [],
+      "val_score": 0.8762,
+      "generations": 500
+    },
+    {
+      "name": "moneylender",
+      "file": "members/moneylender.json",
+      "must": [
+        "Moneylender"
+      ],
+      "banned": [],
+      "val_score": 0.6289,
+      "generations": 500
+    },
+    {
+      "name": "sentry",
+      "file": "members/sentry.json",
+      "must": [
+        "Sentry"
+      ],
+      "banned": [],
+      "val_score": 0.7188,
+      "generations": 500
+    },
+    {
+      "name": "artisan",
+      "file": "members/artisan.json",
+      "must": [
+        "Artisan"
+      ],
+      "banned": [],
+      "val_score": 0.6461,
+      "generations": 500
+    },
+    {
+      "name": "mine",
+      "file": "members/mine.json",
+      "must": [
+        "Mine"
+      ],
+      "banned": [],
+      "val_score": 0.6722,
+      "generations": 500
+    },
+    {
+      "name": "remodel",
+      "file": "members/remodel.json",
+      "must": [
+        "Remodel"
+      ],
+      "banned": [],
+      "val_score": 0.7106,
+      "generations": 500
+    },
+    {
+      "name": "village-smithy",
+      "file": "members/village-smithy.json",
+      "must": [
+        "Village",
+        "Smithy"
+      ],
+      "banned": [],
+      "val_score": 0.6882,
+      "generations": 500
+    },
+    {
+      "name": "throne-room",
+      "file": "members/throne-room.json",
+      "must": [
+        "Throne Room"
+      ],
+      "banned": [],
+      "val_score": 0.6731,
+      "generations": 500
+    },
+    {
+      "name": "bureaucrat",
+      "file": "members/bureaucrat.json",
+      "must": [
+        "Bureaucrat"
+      ],
+      "banned": [],
+      "val_score": 0.6469,
+      "generations": 500
+    },
+    {
+      "name": "k4-20260614",
+      "file": "members/k4-20260614.json",
+      "must": [
+        "Market",
+        "Merchant",
+        "Witch"
+      ],
+      "banned": [],
+      "released_model": "k4-20260614"
+    }
+  ],
+  "created": "2026-11-14",
+  "source": "ga/specialist.py runs: generalist, generalist-safe, witch, militia, smithy, laboratory, council-room, library, chapel, market, festival, bandit, gardens, moneylender, sentry, artisan, mine, remodel, village-smithy, throne-room, bureaucrat, k4-20260614",
+  "description": "21 specialists evolved on the Steam-rules engine with all 26 cards (random kingdoms holding each one's key cards) + k4-20260614; picks one per kingdom by playing them all on it."
+}

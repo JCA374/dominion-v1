@@ -212,7 +212,8 @@ def main(argv=None) -> int:
         results[name] = {"kingdom": kingdom, "key_cards": keys, **r}
         print(f"{name:<18}" + "".join(f"{pct(r[n].get('eligible', r[n]['steam'])['score']):>11}" for n in names)
               + f"{pct(r['eligible_mean']):>10}{pct(r['steam_mean']):>9}   "
-              + ("-" if ref == "big-money" else fmt(keys)), flush=True)
+              + ("-" if ref == "big-money" else "any kingdom: picks a member per kingdom"
+                 if callable(strategy) else fmt(keys)), flush=True)
         if args.store and ref != "big-money":
             store(manifest, keys, r, config)
     if args.json:
