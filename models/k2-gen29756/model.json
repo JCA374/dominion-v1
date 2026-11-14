@@ -18,5 +18,10 @@
   "created": "2026-11-13",
   "source": "models/gen_29756/strategy.json",
   "description": "KINGDOM2 snapshot.",
-  "trained_vs": "63% win / 2% tie / 35% loss (800 games vs hall(6))"
+  "trained_vs": "63% win / 2% tie / 35% loss (800 games vs hall(6))",
+  "key_cards": {
+    "Laboratory": 2
+  },
+  "retired": true,
+  "retired_why": "older genome format the current loader misreads (~0% in policy.bench); never auto-selected"
 }

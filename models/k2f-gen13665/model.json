@@ -19,5 +19,10 @@
   "created": "2026-11-13",
   "source": "models/gen_13665/strategy.json",
   "description": "KINGDOM2 plus Festival (11 cards).",
-  "trained_vs": "66% win / 2% tie / 31% loss (800 games vs hall(4))"
+  "trained_vs": "66% win / 2% tie / 31% loss (800 games vs hall(4))",
+  "key_cards": {
+    "Festival": 2,
+    "Witch": 2,
+    "Militia": 1
+  }
 }

@@ -21,8 +21,11 @@ python -m pytest -q tests                      # all tests
 python -m pytest -q tests/test_policy.py -k X  # one test
 python -m policy.release best_model <name> --description "..." [--default]   # immutable models/<name>/
 python -m policy.check [name ...]              # conformance of released models (answer format only)
-python -m policy.bench [name ...]              # strength: vs Big Money / Smithy-BM / Witch-BM on random
-                                               # Steam-like kingdoms + training kingdom (~1 s per model)
+python -m policy.bench [name ...] [--store] [--missing]  # strength: vs Big Money / Smithy-BM / Witch-BM on
+                                               # Steam-like kingdoms with the model's key cards, random ones and the
+                                               # training kingdom (~1 s per model); --store writes models/<name>/bench.json
+python -m policy.keycards [--write] [name ...] # key cards (kingdom cards a model is built around), measured
+python -m policy.select CARD ... | --best-kingdom   # which model the selector picks for a kingdom, and why
 ```
 
 ## Architecture
@@ -41,7 +44,10 @@ python -m policy.bench [name ...]              # strength: vs Big Money / Smithy
   engine parity for lopsided matchups — a Big Money mirror is ~50% in any engine and proves nothing.
 - Known gaps vs Steam: both engines use 12 Provinces/Duchies in a 2-player game (Steam: 8), and know 15 of the
   26 base-set kingdom cards. `k2-gen29756` and `mixed-gen10324` are older genome formats the current loader
-  misreads (they score ~0% in `policy.bench`); don't play them.
+  misreads (they score ~0% in `policy.bench`); don't play them (they are `"retired"`, so never auto-selected).
+- Models are plug-in folders (`models/` + `DOMINION_MODELS` folders). The selector (`policy/selector.py`) picks
+  by exact training kingdom, then key cards dealt + stored bench score; never Big Money. After releasing a model run
+  `policy.bench --store` so it has a score.
 - `policy/` is the only interface outside players may use: JSON request/answer protocol (`docs/PROTOCOL.md`),
   `load_policy(name)`, `models/DEFAULT`. Bumping `PROTOCOL_VERSION` breaks the autopilot until it is updated too.
 - Further detail: `HOWTO.md` (cards, genome, file layout), `docs/REPORT.md`, `docs/plans/`.

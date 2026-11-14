@@ -10,7 +10,16 @@ model.json (the manifest):
   {"protocol": 1, "name": ..., "kind": "ga-strategy" | "subprocess",
    "kingdom": [...], "file": "strategy.json",            # ga-strategy
    "command": ["python", "-m", "..."], "cwd": "...",      # subprocess
-   "created": "YYYY-MM-DD", "source": ..., "description": ...}
+   "created": "YYYY-MM-DD", "source": ..., "description": ...,
+   "key_cards": {"Smithy": 2, "Witch": 1}}               # optional, see policy/keycards.py
+
+Models are plug-ins: a model is a folder, found in models/ and in every folder listed
+in the DOMINION_MODELS environment variable (os.pathsep-separated). A player can keep its
+own models folder there, and adding a model never needs a code change. A name in models/
+wins over the same name in an extra folder.
+
+Next to model.json a folder may hold bench.json, written by `python -m policy.bench --store`;
+the model selector (policy/select.py) reads it.
 """
 from __future__ import annotations
 
@@ -22,6 +31,7 @@ from policy.protocol import PROTOCOL_VERSION
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(ROOT, "models")
 DEFAULT_FILE = os.path.join(MODELS_DIR, "DEFAULT")
+BENCH_FILE = "bench.json"
 BASE_CARDS = {"Copper", "Silver", "Gold", "Estate", "Duchy", "Province", "Curse", "PASS"}
 
 
@@ -36,15 +46,43 @@ def default_model() -> str | None:
     return None
 
 
+def model_dirs() -> list[str]:
+    """Folders that hold model folders: models/, then DOMINION_MODELS."""
+    extra = [d for d in os.environ.get("DOMINION_MODELS", "").split(os.pathsep) if d]
+    return [MODELS_DIR] + [os.path.abspath(d) for d in extra]
+
+
 def list_models() -> list[dict]:
-    """Manifests of all released models, sorted by name."""
-    out = []
-    if os.path.isdir(MODELS_DIR):
-        for name in sorted(os.listdir(MODELS_DIR)):
-            path = os.path.join(MODELS_DIR, name, "model.json")
-            if os.path.exists(path):
-                out.append(read_manifest(path))
-    return out
+    """Manifests of all models in all model folders, sorted by name."""
+    found = {}
+    for base in model_dirs():
+        if not os.path.isdir(base):
+            continue
+        for name in sorted(os.listdir(base)):
+            path = os.path.join(base, name, "model.json")
+            if os.path.exists(path) and name not in found:
+                found[name] = read_manifest(path)
+    return [found[n] for n in sorted(found)]
+
+
+def read_bench(manifest: dict) -> dict | None:
+    """The stored benchmark of a model (bench.json next to its model.json), if any."""
+    path = os.path.join(manifest.get("dir", ""), BENCH_FILE)
+    if manifest.get("dir") and os.path.exists(path):
+        with open(path) as f:
+            return json.load(f)
+    return None
+
+
+def key_cards(manifest: dict) -> dict[str, int] | None:
+    """The kingdom cards a model is built around: declared in model.json, else derived
+    by the benchmark runner (bench.json). None if neither knows."""
+    if manifest.get("key_cards") is not None:
+        return dict(manifest["key_cards"])
+    bench = read_bench(manifest)
+    if bench and bench.get("key_cards") is not None:
+        return dict(bench["key_cards"])
+    return None
 
 
 def read_manifest(path: str) -> dict:
@@ -63,6 +101,7 @@ def read_manifest(path: str) -> dict:
         if "file" in manifest:
             manifest["path"] = os.path.join(base, manifest["file"])
         manifest.setdefault("cwd", base)
+        manifest["dir"] = base
         if manifest.get("protocol", PROTOCOL_VERSION) > PROTOCOL_VERSION:
             raise ValueError(f"{path}: model needs protocol {manifest['protocol']}, "
                              f"this code speaks {PROTOCOL_VERSION}")
@@ -70,7 +109,8 @@ def read_manifest(path: str) -> dict:
     # bare GA strategy.json
     folder = os.path.basename(os.path.dirname(path))
     return {"protocol": PROTOCOL_VERSION, "name": folder, "kind": "ga-strategy",
-            "file": os.path.basename(path), "path": path, "kingdom": kingdom_of(data)}
+            "file": os.path.basename(path), "path": path, "kingdom": kingdom_of(data),
+            "dir": os.path.dirname(path)}
 
 
 def resolve(ref: str | None) -> str:
@@ -81,9 +121,10 @@ def resolve(ref: str | None) -> str:
             raise FileNotFoundError("no model given and models/DEFAULT is missing")
     if os.path.exists(ref):
         return ref
-    named = os.path.join(MODELS_DIR, ref)
-    if os.path.isdir(named):
-        return named
+    for base in model_dirs():
+        named = os.path.join(base, ref)
+        if os.path.exists(os.path.join(named, "model.json")):
+            return named
     names = [m["name"] for m in list_models()]
     raise FileNotFoundError(f"model {ref!r} not found; released models: {', '.join(names)}")
 

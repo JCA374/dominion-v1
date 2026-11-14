@@ -18,5 +18,10 @@
   "created": "2026-11-13",
   "source": "best_model/strategy.json",
   "description": "Final model of the KINGDOM4 run (Witch/Militia/Moat/Moneylender), 2026-06-14, gen ~49009, with the hall diversity check.",
-  "trained_vs": "53% win / 6% tie / 41% loss (200 games vs hall(6))"
+  "trained_vs": "53% win / 6% tie / 41% loss (200 games vs hall(6))",
+  "key_cards": {
+    "Witch": 2,
+    "Market": 2,
+    "Merchant": 1
+  }
 }

@@ -73,6 +73,14 @@ hand, the buys are affordable, nothing comes from an empty pile.
  "source": "best_model @ 8444772", "description": "...", "trained_vs": "62% win ..."}
 ```
 
+Optional fields (adding them never bumps the protocol):
+
+* `key_cards`: `{"Witch": 2, "Market": 2, "Merchant": 1}`, the kingdom cards the model's game
+  is built around. `policy.release` measures them for a GA model (`policy/keycards.py`); any
+  other kind declares them. The model selector lets a model play any kingdom that holds all
+  its key cards.
+* `retired`: `true` keeps a model out of automatic selection (it can still be played by name).
+
 `kind` decides how the model is loaded:
 
 * `ga-strategy`: a GA `strategy.json`, played by `policy/ga_policy.py` using the
@@ -89,6 +97,33 @@ hand, the buys are affordable, nothing comes from an empty pile.
 To add an in-process kind, subclass `policy.Policy`, implement its five methods
 and register the kind in `policy/registry.py:load_policy`.
 
+## Models are plug-ins
+
+A model is a folder with a `model.json`. Folders are found in `models/` and in every folder
+listed in the `DOMINION_MODELS` environment variable (`os.pathsep`-separated), so a player
+keeps its own models folder (the autopilot's is `dominion-auto/models/`) and adding a model
+is adding a folder: no code, menu or UI changes. `list_models()` returns them all; a name in
+`models/` wins over the same name elsewhere.
+
+## Benchmark and model selector
+
+`python -m policy.bench --store [--missing]` plays every GA model against Big Money,
+Smithy-BM and Witch-BM on random Steam-like kingdoms that contain its key cards, and writes
+`bench.json` next to its `model.json` (`"score"` = mean of the three; also the scores on
+random kingdoms and on the training kingdom, and the measured `key_cards`). A model kind the
+engine can't play (e.g. `subprocess`) can ship its own `bench.json` with a `"score"`.
+
+`policy.select_model(kingdom)` (`policy/selector.py`, CLI `python -m policy.select CARD ...`)
+picks the model for a dealt kingdom:
+
+1. a model trained on exactly this kingdom;
+2. else the best-scoring model whose key cards are all in the kingdom;
+3. else the model with the largest share of its key cards dealt, best score first.
+
+There is no Big Money fallback: the answer is always a real, non-retired model.
+`rank_models(kingdom)` gives the whole ranking with a reason per model, and
+`best_kingdom()` the model + training kingdom to play when the kingdom is ours to choose.
+
 ## Workflow: a new model on Steam
 
 ```bash
@@ -96,6 +131,7 @@ python train.py                                         # writes best_model/
 python -m policy.release best_model k4-gen52000 \
        --description "KINGDOM4, hall diversity"         # copies + checks; add --default to make it the default
 python -m policy.check k4-gen52000                      # conformance (release runs it too)
+python -m policy.bench --store k4-gen52000              # numbers for the model selector
 git add models/k4-gen52000 && git commit && git push
 
 # in dominion-steam-autopilot
@@ -116,4 +152,5 @@ does not bump it, and players ignore fields they don't know. A model whose
 model is checked with `info` when it starts.
 
 Tests: `tests/test_policy.py` (every released model passes the conformance check,
-GA buys match the engine, the pipe gives the same answers as in-process).
+GA buys match the engine, the pipe gives the same answers as in-process) and
+`tests/test_select.py` (plug-in folders, key cards, bench store, selector rules).

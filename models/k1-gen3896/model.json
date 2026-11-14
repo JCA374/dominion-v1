@@ -18,5 +18,8 @@
   "created": "2026-11-13",
   "source": "models/gen_3896/strategy.json",
   "description": "KINGDOM1 snapshot.",
-  "trained_vs": "60% win / 7% tie / 34% loss (800 games vs hall(3))"
+  "trained_vs": "60% win / 7% tie / 34% loss (800 games vs hall(3))",
+  "key_cards": {
+    "Smithy": 1
+  }
 }

@@ -20,5 +20,11 @@
   "created": "2026-11-13",
   "source": "models/gen_10324/strategy.json",
   "description": "Early model trained on 12 cards incl. Gardens and Council Room.",
-  "trained_vs": "70% win / 5% tie / 37% loss (100 games vs best_model_v55)"
+  "trained_vs": "70% win / 5% tie / 37% loss (100 games vs best_model_v55)",
+  "key_cards": {
+    "Gardens": 10,
+    "Council Room": 1
+  },
+  "retired": true,
+  "retired_why": "older genome format the current loader misreads (~0% in policy.bench); never auto-selected"
 }

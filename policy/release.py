@@ -3,7 +3,8 @@
     python -m policy.release best_model k4-gen49009 --description "..." [--default]
 
 Copies strategy.json, summary.txt and buy_heatmap.png, writes model.json
-(kingdom, date, source, headline win rate), and runs the conformance check.
+(kingdom, key cards, date, source, headline win rate), and runs the conformance check.
+Then run `python -m policy.bench --store <name>` so the model selector has its numbers.
 best_model/ keeps changing while the GA trains; models/<name>/ never does.
 """
 from __future__ import annotations
@@ -61,6 +62,9 @@ def release(src: str, name: str, description: str = "", make_default: bool = Fal
         m = re.search(r"Performance \((.+?)\)\s*\n.*?\n\s*Win rate:\s*(.+)", text)
         if m:
             manifest["trained_vs"] = f"{m.group(2).strip()} ({m.group(1)})"
+    from core.strategy import load_strategy
+    from policy.keycards import derive
+    manifest["key_cards"] = derive(load_strategy(src_file), manifest["kingdom"])
     with open(os.path.join(dst, "model.json"), "w") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")
