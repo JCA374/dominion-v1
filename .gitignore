@@ -8,3 +8,5 @@ evolution_log.csv
 !demo/buy_heatmap.png
 *.so
 !models/*/buy_heatmap.png
+runs/
+runs.log

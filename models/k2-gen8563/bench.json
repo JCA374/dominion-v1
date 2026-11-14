@@ -1,5 +1,5 @@
 {
- "bench_version": 2,
+ "bench_version": 3,
  "model": "k2-gen8563",
  "date": "2026-11-14",
  "config": {
@@ -11,74 +11,74 @@
   "Laboratory": 2,
   "Militia": 1
  },
- "score": 0.5256875,
- "random_score": 0.4594583333333333,
+ "score": 0.47881250000000003,
+ "random_score": 0.4414166666666666,
  "opponents": {
   "Big Money": {
    "steam": {
-    "score": 0.676125,
-    "win": 0.6685,
-    "tie": 0.01525,
+    "score": 0.6255,
+    "win": 0.604,
+    "tie": 0.043,
     "games": 8000,
     "kingdoms": 200
    },
    "training": {
-    "score": 0.9,
-    "win": 0.9,
-    "tie": 0.0,
+    "score": 0.7375,
+    "win": 0.725,
+    "tie": 0.025,
     "games": 400,
     "kingdoms": 1
    },
    "eligible": {
-    "score": 0.8554375,
-    "win": 0.85275,
-    "tie": 0.005375,
+    "score": 0.743,
+    "win": 0.724,
+    "tie": 0.038,
     "games": 8000,
     "kingdoms": 200
    }
   },
   "Smithy-BM": {
    "steam": {
-    "score": 0.3929375,
-    "win": 0.380375,
-    "tie": 0.025125,
+    "score": 0.399875,
+    "win": 0.38075,
+    "tie": 0.03825,
     "games": 8000,
     "kingdoms": 200
    },
    "training": {
-    "score": 0.5,
-    "win": 0.475,
+    "score": 0.525,
+    "win": 0.5,
     "tie": 0.05,
     "games": 400,
     "kingdoms": 1
    },
    "eligible": {
-    "score": 0.46875,
-    "win": 0.44375,
-    "tie": 0.05,
+    "score": 0.466375,
+    "win": 0.439375,
+    "tie": 0.054,
     "games": 8000,
     "kingdoms": 200
    }
   },
   "Witch-BM": {
    "steam": {
-    "score": 0.3093125,
-    "win": 0.30375,
-    "tie": 0.011125,
+    "score": 0.298875,
+    "win": 0.287125,
+    "tie": 0.0235,
     "games": 8000,
     "kingdoms": 200
    },
    "training": {
-    "score": 0.2,
-    "win": 0.2,
+    "score": 0.125,
+    "win": 0.125,
     "tie": 0.0,
     "games": 400,
     "kingdoms": 1
    },
    "eligible": {
-    "score": 0.252875,
-    "win": 0.252875,
-    "tie": 0.0,
+    "score": 0.2270625,
+    "win": 0.218375,
+    "tie": 0.017375,
     "games": 8000,
     "kingdoms": 200
    }

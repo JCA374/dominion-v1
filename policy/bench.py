@@ -41,7 +41,8 @@ from policy.keycards import derive, fmt
 from policy.registry import (BENCH_FILE, key_cards, list_models, read_bench, read_manifest,
                              resolve)
 
-BENCH_VERSION = 2   # 2: engine with Steam rules (8 Provinces, all 26 cards, tiebreak)
+BENCH_VERSION = 3   # 2: engine with Steam rules (8 Provinces, all 26 cards, tiebreak)
+                    # 3: own game seeds per kingdom (kingdom_seeds)
 
 # Steam Dominion's base set (2nd edition): the pool its random kingdoms are drawn from.
 STEAM_BASE_SET = [
@@ -72,10 +73,17 @@ def steam_kingdoms(n: int, seed: int, must=None) -> list[list[str]]:
     return out
 
 
+def kingdom_seeds(seeds: list[int], i: int) -> list[int]:
+    """The game seeds for the i-th kingdom of a set. Every kingdom gets its own: with shared
+    seeds, two players that ignore the kingdom cards replay the very same games on each."""
+    return [(s + 0x9E3779B97F4A7C15 * (i + 1)) % 2**32 for s in seeds]
+
+
 def score(strategy: Strategy, opponent, kingdoms: list[list[str]], seeds: list[int]) -> dict:
     wins = ties = games = 0
-    for k in kingdoms:
-        r = evaluate_vs_opponent(strategy, seeds, k, opponent(k))
+    for i, k in enumerate(kingdoms):
+        s = strategy(k) if callable(strategy) else strategy     # a portfolio picks per kingdom
+        r = evaluate_vs_opponent(s, kingdom_seeds(seeds, i), k, opponent(k))
         n = 2 * len(seeds)
         wins += round(r["win_rate"] * n)
         ties += round(r["tie_rate"] * n)
@@ -109,10 +117,32 @@ def bench(strategy: Strategy, train_kingdom: list[str] | None, n_kingdoms: int,
     return out
 
 
-def load(ref: str) -> tuple[dict, Strategy | None]:
+def portfolio_player(manifest: dict, all_cards: bool = False):
+    """kingdom -> the member strategy a ga-portfolio plays there, as the player plays it
+    (blocked cards never bought, unless all_cards)."""
+    from ga.specialist import mask
+    from policy.portfolio import choose, members
+    from policy.protocol import NO_REQUEST_YET
+    strategies, banned = members(manifest), () if all_cards else NO_REQUEST_YET
+    cache = {}
+
+    def play(k):
+        key = tuple(sorted(k))
+        if key not in cache:
+            name = choose(manifest, list(key), banned, strategies=strategies)["member"]
+            cache[key] = mask(strategies[name], banned)
+        return cache[key]
+    return play
+
+
+def load(ref: str, all_cards: bool = False) -> tuple[dict, Strategy | None]:
+    """A model as something bench() plays: a Strategy, or for a portfolio a kingdom -> Strategy
+    function. None for kinds the engine can't play."""
     if ref == "big-money":
         return {"name": ref, "kingdom": None}, big_money_strategy()
     manifest = read_manifest(resolve(ref))
+    if manifest["kind"] == "ga-portfolio":
+        return manifest, portfolio_player(manifest, all_cards)
     if manifest["kind"] != "ga-strategy":
         return manifest, None
     return manifest, load_strategy(manifest["path"])
@@ -141,12 +171,17 @@ def main(argv=None) -> int:
     ap.add_argument("--kingdoms", type=int, default=200, help="random Steam-like kingdoms per opponent")
     ap.add_argument("--seeds", type=int, default=20, help="games per kingdom (each played from both seats)")
     ap.add_argument("--seed", type=int, default=1, help="draws the kingdoms and game seeds")
+    ap.add_argument("--all-cards", action="store_true",
+                    help="portfolios buy every card (default: as a player plays them, without "
+                         "policy.protocol.NO_REQUEST_YET)")
     ap.add_argument("--json", metavar="FILE", help="also write all results to one JSON file")
     ap.add_argument("--store", action="store_true", help="write bench.json into each model's folder")
     ap.add_argument("--missing", action="store_true",
                     help="skip models whose bench.json is up to date (same settings and version)")
     args = ap.parse_args(argv)
     config = {"kingdoms": args.kingdoms, "seeds": args.seeds, "seed": args.seed}
+    if args.all_cards:
+        config["all_cards"] = True
 
     refs = args.models or [m["name"] for m in list_models()]
     refs = ["big-money"] + [r for r in refs if r != "big-money"]
@@ -158,7 +193,7 @@ def main(argv=None) -> int:
           + "   key cards")
     results = {}
     for ref in refs:
-        manifest, strategy = load(ref)
+        manifest, strategy = load(ref, args.all_cards)
         name = manifest["name"]
         if strategy is None:
             print(f"{name:<18} skipped: a {manifest['kind']} model can't be played on the engine yet; "
@@ -169,9 +204,9 @@ def main(argv=None) -> int:
             print(f"{name:<18}" + " " * 11 * len(names) + f"{pct(b['score']):>10}{pct(b['random_score']):>9}"
                   f"   {fmt(b.get('key_cards'))}   (stored)", flush=True)
             continue
-        kingdom = manifest.get("kingdom")
+        kingdom = None if callable(strategy) else manifest.get("kingdom")
         keys = None if ref == "big-money" else key_cards(manifest)
-        if keys is None and kingdom:
+        if keys is None and kingdom and not callable(strategy):
             keys = derive(strategy, kingdom)
         r = bench(strategy, kingdom, args.kingdoms, args.seeds, args.seed, keys)
         results[name] = {"kingdom": kingdom, "key_cards": keys, **r}

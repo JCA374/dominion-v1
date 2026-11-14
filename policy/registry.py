@@ -7,7 +7,7 @@ A model reference can be
   - None                              the name in models/DEFAULT
 
 model.json (the manifest):
-  {"protocol": 1, "name": ..., "kind": "ga-strategy" | "subprocess",
+  {"protocol": 1, "name": ..., "kind": "ga-strategy" | "ga-portfolio" | "subprocess",
    "kingdom": [...], "file": "strategy.json",            # ga-strategy
    "command": ["python", "-m", "..."], "cwd": "...",      # subprocess
    "created": "YYYY-MM-DD", "source": ..., "description": ...,
@@ -136,7 +136,10 @@ def load_policy(ref: str | None = None):
     if kind == "ga-strategy":
         from policy.ga_policy import GAPolicy
         return GAPolicy(manifest)
+    if kind == "ga-portfolio":
+        from policy.portfolio import PortfolioPolicy
+        return PortfolioPolicy(manifest)
     if kind == "subprocess":
         from policy.client import SubprocessPolicy
         return SubprocessPolicy(manifest)
-    raise ValueError(f"unknown model kind {kind!r} (known: ga-strategy, subprocess)")
+    raise ValueError(f"unknown model kind {kind!r} (known: ga-strategy, ga-portfolio, subprocess)")

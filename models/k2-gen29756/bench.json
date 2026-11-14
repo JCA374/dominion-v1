@@ -1,5 +1,5 @@
 {
- "bench_version": 2,
+ "bench_version": 3,
  "model": "k2-gen29756",
  "date": "2026-11-14",
  "config": {
@@ -10,14 +10,14 @@
  "key_cards": {
   "Laboratory": 2
  },
- "score": 0.0,
- "random_score": 0.0,
+ "score": 0.00043749999999999995,
+ "random_score": 0.0003125,
  "opponents": {
   "Big Money": {
    "steam": {
-    "score": 0.0,
-    "win": 0.0,
-    "tie": 0.0,
+    "score": 0.0006875,
+    "win": 0.000375,
+    "tie": 0.000625,
     "games": 8000,
     "kingdoms": 200
    },
@@ -29,18 +29,18 @@
     "kingdoms": 1
    },
    "eligible": {
-    "score": 0.0,
-    "win": 0.0,
-    "tie": 0.0,
+    "score": 0.001125,
+    "win": 0.000875,
+    "tie": 0.0005,
     "games": 8000,
     "kingdoms": 200
    }
   },
   "Smithy-BM": {
    "steam": {
-    "score": 0.0,
-    "win": 0.0,
-    "tie": 0.0,
+    "score": 0.00025,
+    "win": 0.000125,
+    "tie": 0.00025,
     "games": 8000,
     "kingdoms": 200
    },
@@ -52,9 +52,9 @@
     "kingdoms": 1
    },
    "eligible": {
-    "score": 0.0,
+    "score": 0.0001875,
     "win": 0.0,
-    "tie": 0.0,
+    "tie": 0.000375,
     "games": 8000,
     "kingdoms": 200
    }

@@ -1,5 +1,5 @@
 {
- "bench_version": 2,
+ "bench_version": 3,
  "model": "k1-gen8938",
  "date": "2026-11-14",
  "config": {
@@ -12,67 +12,67 @@
   "Market": 1,
   "Smithy": 1
  },
- "score": 0.4506041666666667,
- "random_score": 0.43175,
+ "score": 0.46156250000000004,
+ "random_score": 0.4229583333333333,
  "opponents": {
   "Big Money": {
    "steam": {
-    "score": 0.6603125,
-    "win": 0.639625,
-    "tie": 0.041375,
+    "score": 0.6305,
+    "win": 0.61025,
+    "tie": 0.0405,
     "games": 8000,
     "kingdoms": 200
    },
    "training": {
-    "score": 0.7125,
-    "win": 0.7,
-    "tie": 0.025,
+    "score": 0.725,
+    "win": 0.725,
+    "tie": 0.0,
     "games": 400,
     "kingdoms": 1
    },
    "eligible": {
-    "score": 0.7120625,
-    "win": 0.687875,
-    "tie": 0.048375,
+    "score": 0.6993125,
+    "win": 0.68325,
+    "tie": 0.032125,
     "games": 8000,
     "kingdoms": 200
    }
   },
   "Smithy-BM": {
    "steam": {
-    "score": 0.5055625,
-    "win": 0.482125,
-    "tie": 0.046875,
+    "score": 0.5444375,
+    "win": 0.526,
+    "tie": 0.036875,
     "games": 8000,
     "kingdoms": 200
    },
    "training": {
-    "score": 0.5375,
-    "win": 0.5,
-    "tie": 0.075,
+    "score": 0.6125,
+    "win": 0.55,
+    "tie": 0.125,
     "games": 400,
     "kingdoms": 1
    },
    "eligible": {
-    "score": 0.508,
-    "win": 0.4705,
-    "tie": 0.075,
+    "score": 0.54525,
+    "win": 0.526625,
+    "tie": 0.03725,
     "games": 8000,
     "kingdoms": 200
    }
   },
   "Witch-BM": {
    "steam": {
-    "score": 0.129375,
-    "win": 0.12525,
-    "tie": 0.00825,
+    "score": 0.0939375,
+    "win": 0.0885,
+    "tie": 0.010875,
     "games": 8000,
     "kingdoms": 200
    },
    "eligible": {
-    "score": 0.13175,
-    "win": 0.11925,
-    "tie": 0.025,
+    "score": 0.140125,
+    "win": 0.133875,
+    "tie": 0.0125,
     "games": 8000,
     "kingdoms": 200
    }

@@ -31,6 +31,10 @@ python -m policy.bench [name ...] [--store] [--missing]  # strength: vs Big Mone
                                                # training kingdom (~1 s per model); --store writes models/<name>/bench.json
 python -m policy.keycards [--write] [name ...] # key cards (kingdom cards a model is built around), measured
 python -m policy.select CARD ... | --best-kingdom   # which model the selector picks for a kingdom, and why
+python -m ga.specialist NAME --must Witch [--exclude-blocked]  # one portfolio specialist -> runs/NAME/
+./train_portfolio.sh [NAME ...]                # all specialists in the queue (skips finished runs)
+python -m policy.portfolio build NAME runs/*   # release them as one ga-portfolio model in models/NAME/
+python -m policy.portfolio choose NAME CARD ...  # which member the portfolio plays on a kingdom
 ```
 
 ## Architecture
@@ -54,6 +58,11 @@ python -m policy.select CARD ... | --best-kingdom   # which model the selector p
 - The 11 cards the first engine lacked are trainable, but the protocol has no requests for the choices of 9 of
   them (`policy.protocol.NO_REQUEST_YET`), so policies never buy those; opening one up needs a protocol request
   and the autopilot learning its Steam prompt.
+- Portfolio models (kind `ga-portfolio`, `policy/portfolio.py`): specialist genomes trained by `ga/specialist.py`
+  with all 26 cards on fresh random kingdoms holding their key cards, fitness = the benchmark bots. At game start the
+  policy plays every member on the dealt kingdom (C engine, ~0.5 s, blocked cards masked) and the best one plays.
+  Benchmarks and plans give every kingdom its own game seeds (`policy.bench.kingdom_seeds`, bench_version 3):
+  shared seeds replay identical games wherever neither player buys the kingdom cards.
 - Models are plug-in folders (`models/` + `DOMINION_MODELS` folders). The selector (`policy/selector.py`) picks
   by exact training kingdom, then key cards dealt + stored bench score; never Big Money. After releasing a model run
   `policy.bench --store` so it has a score.
