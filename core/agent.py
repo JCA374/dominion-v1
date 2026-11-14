@@ -70,9 +70,10 @@ class GAAgent:
         return 0
 
     def discard_rank(self, c: int, hand: list[int]) -> int:
-        """Lower = discard first: Curse, Estate, Copper, Duchy, Gardens, actions, Silver, Gold, Province."""
-        fixed = {K.CURSE: 0, K.ESTATE: 10, K.COPPER: 20, K.DUCHY: 30, K.GARDENS: 35,
-                 K.SILVER: 800, K.GOLD: 850, K.PROVINCE: 900}
+        """Lower = discard first: Curse, Estate, Copper, Duchy, Province, Gardens, actions, Silver, Gold.
+        (Until 2026-11-15 Province ranked above Gold, so Militia made it discard Gold first.)"""
+        fixed = {K.CURSE: 0, K.ESTATE: 10, K.COPPER: 20, K.DUCHY: 30, K.PROVINCE: 32, K.GARDENS: 35,
+                 K.SILVER: 800, K.GOLD: 850}
         if c in fixed:
             return fixed[c]
         if K.CARDS[c].is_action:

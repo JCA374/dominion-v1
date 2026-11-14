@@ -68,7 +68,7 @@ static int discard_rank(const ga_agent *a, int c, const de_player *p) {
     case DE_GARDENS: return 35;
     case DE_SILVER: return 800;
     case DE_GOLD: return 850;
-    case DE_PROVINCE: return 900;
+    case DE_PROVINCE: return 32;       /* dead in hand, like Duchy */
     }
     if (DE_CARDS[c].types & DE_ACTION) {
         int copies = 0;
