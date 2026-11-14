@@ -66,13 +66,13 @@ def test_unknown_cards_are_never_bought_and_discarded_first():
     assert policy.discard(obs, keep=3)[0] == "Torturer"
 
 
-def test_cards_without_protocol_requests_are_never_bought():
+def test_every_card_can_be_bought_since_protocol_2():
     from core.strategy import big_money_strategy
     from policy.ga_policy import GAPolicy
     s = big_money_strategy()
     s.early_buy_priority = ["Cellar", "Remodel", "Silver", "PASS"]
     policy = GAPolicy({"name": "t", "kingdom": ["Cellar", "Remodel"]}, s)
-    assert policy.buy(observation(kingdom=["Cellar", "Remodel"], coins=4)) == ["Silver"]
+    assert policy.buy(observation(kingdom=["Cellar", "Remodel"], coins=4)) == ["Cellar"]
 
 
 def test_handle_reports_errors_instead_of_raising():

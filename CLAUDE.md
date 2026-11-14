@@ -55,9 +55,10 @@ python -m policy.portfolio choose NAME CARD ...  # which member the portfolio pl
   `engine/RULES.md`); their `bench.json` is re-measured on Steam rules (bench_version 2). `k2-gen29756` and
   `mixed-gen10324` are older genome formats the current loader misreads (~0% in `policy.bench`); they are
   `"retired"`, so never auto-selected.
-- The 11 cards the first engine lacked are trainable, but the protocol has no requests for the choices of 9 of
-  them (`policy.protocol.NO_REQUEST_YET`), so policies never buy those; opening one up needs a protocol request
-  and the autopilot learning its Steam prompt.
+- Protocol 2 (2026-11-14): every card's own choices have a request (cellar, remodel, workshop, artisan, mine,
+  moneylender, harbinger, vassal, library, sentry, poacher, bandit, bureaucrat), answered by the engine's decision
+  sequence asked of the same GAAgent; `tests/test_card_requests.py` checks policy == genome in engine games.
+  `NO_REQUEST_YET` is empty, so models buy every card.
 - Portfolio models (kind `ga-portfolio`, `policy/portfolio.py`): specialist genomes trained by `ga/specialist.py`
   with all 26 cards on fresh random kingdoms holding their key cards, fitness = the benchmark bots. At game start the
   policy plays every member on the dealt kingdom (C engine, ~0.5 s, blocked cards masked) and the best one plays.

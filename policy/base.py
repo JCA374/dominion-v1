@@ -35,6 +35,47 @@ class Policy:
     def throne_target(self, obs: dict) -> str | None:
         raise NotImplementedError
 
+    # -- the cards' own choices (protocol 2; see policy/protocol.py) -----------
+
+    def cellar(self, obs: dict) -> list[str]:
+        raise NotImplementedError
+
+    def poacher(self, obs: dict, n: int) -> list[str]:
+        raise NotImplementedError
+
+    def remodel(self, obs: dict) -> dict:
+        raise NotImplementedError
+
+    def workshop(self, obs: dict) -> str | None:
+        raise NotImplementedError
+
+    def artisan(self, obs: dict) -> dict:
+        raise NotImplementedError
+
+    def mine(self, obs: dict) -> dict:
+        raise NotImplementedError
+
+    def moneylender(self, obs: dict) -> bool:
+        raise NotImplementedError
+
+    def harbinger(self, obs: dict, discard_pile: list[str]) -> str | None:
+        raise NotImplementedError
+
+    def vassal(self, obs: dict, card: str) -> bool:
+        raise NotImplementedError
+
+    def library(self, obs: dict, card: str) -> bool:
+        raise NotImplementedError
+
+    def sentry(self, obs: dict, cards: list[str]) -> dict:
+        raise NotImplementedError
+
+    def bandit(self, obs: dict, cards: list[str]) -> str | None:
+        raise NotImplementedError
+
+    def bureaucrat(self, obs: dict) -> str | None:
+        raise NotImplementedError
+
     def phase(self, obs: dict) -> str | None:
         """Optional short label for logs (e.g. 'early')."""
         return None
@@ -63,6 +104,28 @@ class Policy:
                 answer = {"discard": self.discard(obs, int(request.get("keep", 3)))}
             elif kind == "throne_room":
                 answer = {"target": self.throne_target(obs)}
+            elif kind == "cellar":
+                answer = {"discard": self.cellar(obs)}
+            elif kind == "poacher":
+                answer = {"discard": self.poacher(obs, int(request.get("n", len(obs["empty_piles"]))))}
+            elif kind in ("remodel", "artisan", "mine"):
+                answer = dict(getattr(self, kind)(obs))
+            elif kind == "workshop":
+                answer = {"gain": self.workshop(obs)}
+            elif kind == "moneylender":
+                answer = {"trash": bool(self.moneylender(obs))}
+            elif kind == "harbinger":
+                answer = {"topdeck": self.harbinger(obs, list(request.get("discard_pile", [])))}
+            elif kind == "vassal":
+                answer = {"play": bool(self.vassal(obs, request["card"]))}
+            elif kind == "library":
+                answer = {"skip": bool(self.library(obs, request["card"]))}
+            elif kind == "sentry":
+                answer = dict(self.sentry(obs, list(request["cards"])))
+            elif kind == "bandit":
+                answer = {"trash": self.bandit(obs, list(request["cards"]))}
+            elif kind == "bureaucrat":
+                answer = {"topdeck": self.bureaucrat(obs)}
             else:
                 return {"error": f"unknown request type {kind!r}"}
             phase = self.phase(obs)

@@ -20,19 +20,35 @@ Requests and answers ({"type": ..., "obs": {...}, ...} -> {...}):
     trash        (Chapel)      -> {"trash": [card, ...]}
     discard      + "keep": n   -> {"discard": [card, ...]}     attack: discard down to n
     throne_room                -> {"target": card | null}
+  protocol 2: the choices of every other base-set card (the engine's own decisions)
+    cellar                     -> {"discard": [card, ...]}     then draw that many
+    poacher      + "n": k      -> {"discard": [card, ...]}     k = empty supply piles
+    remodel                    -> {"trash": card, "gain": card}   gain costs up to trash + 2
+    workshop                   -> {"gain": card}               costing up to 4
+    artisan                    -> {"gain": card, "topdeck": card}  gain (up to 5) to hand,
+                                                               then a hand card onto the deck
+    mine                       -> {"trash": treasure | null, "gain": treasure}  up to +3, to hand
+    moneylender                -> {"trash": bool}              trash a Copper for +$3
+    harbinger    + "discard_pile": [card, ...] -> {"topdeck": card | null}
+    vassal       + "card": c   -> {"play": bool}               play the discarded action?
+    library      + "card": c   -> {"skip": bool}               set the drawn action aside?
+    sentry       + "cards": [a, b] -> {"trash": [...], "discard": [...], "keep": [...]}
+                                                               keep: top of the deck first
+    bandit       + "cards": [..]   -> {"trash": card | null}  (attacked) revealed treasure to lose
+    bureaucrat                 -> {"topdeck": card | null}    (attacked) victory card onto deck
 Every answer may also carry "phase" (a short label for logs) or "error".
 """
 from __future__ import annotations
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2   # 2: a request for every card's own choices (cellar ... bureaucrat)
 
-REQUESTS = ("info", "action", "buy", "trash", "discard", "throne_room")
+REQUESTS = ("info", "action", "buy", "trash", "discard", "throne_room",
+            "cellar", "poacher", "remodel", "workshop", "artisan", "mine", "moneylender",
+            "harbinger", "vassal", "library", "sentry", "bandit", "bureaucrat")
 
-# Cards whose own choices no request above can express yet (the engine knows them). A model is
-# never told to buy one, so a player like the Steam autopilot never meets their prompts. To
-# allow one: add its request here and in docs/PROTOCOL.md, and teach the players its prompt.
-NO_REQUEST_YET = ("Artisan", "Cellar", "Harbinger", "Library", "Poacher", "Remodel", "Sentry",
-                  "Vassal", "Workshop")
+# Cards whose own choices no request above can express yet. A model is never told to buy one,
+# so a player never meets their prompts. Since protocol 2 every base-set card has its request.
+NO_REQUEST_YET: tuple[str, ...] = ()
 
 OBS_DEFAULTS = {
     "turn": 1,
@@ -136,6 +152,68 @@ def check_answer(request: dict, answer: dict, costs: dict[str, int] | None = Non
                 rest.remove("Throne Room")
             if card not in rest:
                 problems.append(f"target {card!r} is not in hand {hand}")
+    elif kind in ("cellar", "poacher"):
+        cards = answer.get("discard")
+        if not isinstance(cards, list):
+            return [f"{kind} answer lacks a 'discard' list"]
+        from_hand(cards, "discard")
+        if kind == "poacher" and len(cards) != min(request.get("n", 0), len(hand)):
+            problems.append(f"poacher discarded {len(cards)}, needed {min(request.get('n', 0), len(hand))}")
+    elif kind in ("remodel", "mine"):
+        t, g = answer.get("trash", "missing"), answer.get("gain", "missing")
+        if t == "missing" or g == "missing":
+            return [f"{kind} answer needs 'trash' and 'gain'"]
+        if t is not None:
+            from_hand([t], "trash")
+            if costs is not None and g is not None and costs.get(g, 99) > costs.get(t, 0) + (2 if kind == "remodel" else 3):
+                problems.append(f"{kind}: {g} costs too much for {t}")
+        elif kind == "remodel" and hand:
+            problems.append("remodel must trash a card")
+    elif kind in ("workshop", "artisan"):
+        g = answer.get("gain", "missing")
+        if g == "missing":
+            return [f"{kind} answer lacks 'gain'"]
+        if costs is not None and g is not None and costs.get(g, 99) > (4 if kind == "workshop" else 5):
+            problems.append(f"{kind}: {g} costs too much")
+        if kind == "artisan":
+            top = answer.get("topdeck", "missing")
+            if top == "missing":
+                problems.append("artisan answer lacks 'topdeck'")
+            elif top is not None and top not in hand + ([g] if g else []):
+                problems.append(f"artisan topdeck {top!r} is not in hand")
+    elif kind == "moneylender":
+        if not isinstance(answer.get("trash"), bool):
+            problems.append("moneylender answer needs a bool 'trash'")
+        elif answer["trash"] and "Copper" not in hand:
+            problems.append("moneylender trashes a Copper that isn't in hand")
+    elif kind == "harbinger":
+        top = answer.get("topdeck", "missing")
+        if top == "missing":
+            problems.append("harbinger answer lacks 'topdeck'")
+        elif top is not None and top not in request.get("discard_pile", []):
+            problems.append(f"harbinger topdeck {top!r} is not in the discard pile")
+    elif kind in ("vassal", "library"):
+        key = "play" if kind == "vassal" else "skip"
+        if not isinstance(answer.get(key), bool):
+            problems.append(f"{kind} answer needs a bool {key!r}")
+    elif kind == "sentry":
+        parts = [answer.get(k) for k in ("trash", "discard", "keep")]
+        if not all(isinstance(x, list) for x in parts):
+            return ["sentry answer needs 'trash', 'discard' and 'keep' lists"]
+        if sorted(sum(parts, [])) != sorted(request.get("cards", [])):
+            problems.append(f"sentry answer {answer} doesn't place exactly {request.get('cards')}")
+    elif kind == "bandit":
+        t = answer.get("trash", "missing")
+        if t == "missing":
+            problems.append("bandit answer lacks 'trash'")
+        elif t is not None and t not in request.get("cards", []):
+            problems.append(f"bandit trash {t!r} was not revealed")
+    elif kind == "bureaucrat":
+        t = answer.get("topdeck", "missing")
+        if t == "missing":
+            problems.append("bureaucrat answer lacks 'topdeck'")
+        elif t is not None:
+            from_hand([t], "topdeck")
     else:
         problems.append(f"unknown request type {kind!r}")
     return problems

@@ -41,6 +41,15 @@ def scenarios(kingdom: list[str], n: int = 60, seed: int = 1) -> list[dict]:
         reqs.append({"type": "trash", "obs": obs})
         reqs.append({"type": "throne_room", "obs": {**obs, "hand": ["Throne Room"] + hand[:4]}})
         reqs.append({"type": "discard", "keep": 3, "obs": obs})
+        for kind in ("cellar", "remodel", "workshop", "artisan", "mine", "moneylender", "bureaucrat"):
+            reqs.append({"type": kind, "obs": obs})
+        reqs.append({"type": "poacher", "n": rng.choice([1, 2]), "obs": obs})
+        reqs.append({"type": "harbinger", "discard_pile": rng.sample(pool, k=4), "obs": obs})
+        reqs.append({"type": "vassal", "card": rng.choice(pool), "obs": obs})
+        reqs.append({"type": "library", "card": rng.choice(pool), "obs": obs})
+        reqs.append({"type": "sentry", "cards": rng.sample(pool, k=2), "obs": obs})
+        reqs.append({"type": "bandit", "cards": rng.sample(["Silver", "Gold", "Copper", "Estate"], k=2),
+                     "obs": obs})
     return reqs
 
 

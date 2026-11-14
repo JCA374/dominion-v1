@@ -99,6 +99,45 @@ class PortfolioPolicy(Policy):
     def throne_target(self, obs):
         return self.member(obs).throne_target(obs)
 
+    def cellar(self, obs):
+        return self.member(obs).cellar(obs)
+
+    def poacher(self, obs, n):
+        return self.member(obs).poacher(obs, n)
+
+    def remodel(self, obs):
+        return self.member(obs).remodel(obs)
+
+    def workshop(self, obs):
+        return self.member(obs).workshop(obs)
+
+    def artisan(self, obs):
+        return self.member(obs).artisan(obs)
+
+    def mine(self, obs):
+        return self.member(obs).mine(obs)
+
+    def moneylender(self, obs):
+        return self.member(obs).moneylender(obs)
+
+    def harbinger(self, obs, discard_pile):
+        return self.member(obs).harbinger(obs, discard_pile)
+
+    def vassal(self, obs, card):
+        return self.member(obs).vassal(obs, card)
+
+    def library(self, obs, card):
+        return self.member(obs).library(obs, card)
+
+    def sentry(self, obs, cards):
+        return self.member(obs).sentry(obs, cards)
+
+    def bandit(self, obs, cards):
+        return self.member(obs).bandit(obs, cards)
+
+    def bureaucrat(self, obs):
+        return self.member(obs).bureaucrat(obs)
+
     def phase(self, obs):
         p = self.member(obs)
         return f"{self.chosen['member']}:{p.phase(obs)}"

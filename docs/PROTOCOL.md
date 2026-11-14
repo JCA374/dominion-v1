@@ -1,4 +1,4 @@
-# Model ↔ player protocol (v1)
+# Model ↔ player protocol (v2)
 
 This repo trains models. Players use them; the main one is the
 [Steam autopilot](https://github.com/JCA374/dominion-steam-autopilot), which has
@@ -48,23 +48,38 @@ Observation, sent as `"obs"` with every decision:
 
 | request | extra | answer |
 |---|---|---|
-| `{"type": "info"}` | | `{"protocol": 1, "name", "kind", "kingdom", ...}` |
+| `{"type": "info"}` | | `{"protocol": 2, "name", "kind", "kingdom", ...}` |
 | `action` | | `{"play": card or null}`: the next action to play (asked again after each one) |
 | `buy` | | `{"buy": [card, ...]}`: all buys this turn, in order |
 | `trash` | | `{"trash": [card, ...]}`: Chapel |
 | `discard` | `"keep": n` | `{"discard": [card, ...]}`: an attack, discard down to n |
 | `throne_room` | | `{"target": card or null}` |
+| `cellar` | | `{"discard": [card, ...]}`: then draw that many |
+| `poacher` | `"n": k` empty piles | `{"discard": [card, ...]}`: exactly min(k, hand) cards |
+| `remodel` | | `{"trash": card, "gain": card}`: gain costs up to the trashed card + 2 |
+| `workshop` | | `{"gain": card}`: costing up to 4 |
+| `artisan` | | `{"gain": card, "topdeck": card}`: gain (up to 5) to hand, then a hand card onto the deck |
+| `mine` | | `{"trash": treasure or null, "gain": treasure}`: up to +3, into hand |
+| `moneylender` | | `{"trash": bool}`: trash a Copper for +$3 |
+| `harbinger` | `"discard_pile": [card, ...]` | `{"topdeck": card or null}` |
+| `vassal` | `"card": c` (the discarded action) | `{"play": bool}` |
+| `library` | `"card": c` (the drawn action) | `{"skip": bool}`: set it aside |
+| `sentry` | `"cards": [a, b]` (the two looked at) | `{"trash": [...], "discard": [...], "keep": [...]}`, keep = top of the deck first |
+| `bandit` | `"cards": [...]` (revealed, when attacked) | `{"trash": card or null}` |
+| `bureaucrat` | (when attacked) | `{"topdeck": card or null}`: victory card put onto the deck |
 
 Any answer may also include `"phase"` (a label for logs) or `"error"` (a message;
 the player should then fall back or wait). Card names are the English names on
 the cards. A model must cope with cards it doesn't know (Steam kingdoms vary):
 it never buys them, and it discards them first.
 
-The engine (`engine/`, Steam rules) knows all 26 base-set cards, but the requests above can
-only express the choices of some of them. A model is never told to buy a card in
-`policy.protocol.NO_REQUEST_YET` (Artisan, Cellar, Harbinger, Library, Poacher, Remodel,
-Sentry, Vassal, Workshop), so a player never meets their prompts. Opening one up means a new
-request here, a protocol version bump, and the player learning that card's prompt.
+The engine (`engine/`, Steam rules) knows all 26 base-set cards, and since protocol 2 every
+choice a card asks for has a request (the card rows above). Each answer is the engine's own
+decision sequence for that card (`Game._play`) asked of the same agent that played in
+training, so a model plays its cards on Steam as it did in the engine
+(`tests/test_card_requests.py` checks this decision by decision). Protocol 1 had no requests
+for Artisan, Cellar, Harbinger, Library, Poacher, Remodel, Sentry, Vassal and Workshop, and
+models never bought them (`policy.protocol.NO_REQUEST_YET`, now empty).
 
 `policy.check_answer(request, answer)` checks an answer is legal: the cards are in
 hand, the buys are affordable, nothing comes from an empty pile.
@@ -152,7 +167,8 @@ names the model the autopilot plays when no `--model` is given.
 ## Versioning
 
 `PROTOCOL_VERSION` (in `policy/protocol.py`) goes up only when a field or request
-changes meaning or is removed. Adding an optional field or a new request type
+changes meaning or is removed. Version 2 added the card requests and, with them, models buy
+every card: a version-1 player would meet prompts it can't answer, hence the bump. Adding an optional field or a new request type
 does not bump it, and players ignore fields they don't know. A model whose
 `protocol` is newer than the code is refused when it loads, and a subprocess
 model is checked with `info` when it starts.
