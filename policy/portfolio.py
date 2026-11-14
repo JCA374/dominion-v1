@@ -1,7 +1,7 @@
 """Portfolio model (kind "ga-portfolio"): several specialist genomes, and a selector that picks
 one for the dealt kingdom by playing them all on it.
 
-    python -m policy.portfolio build portfolio-v1 runs/witch runs/militia ... [--description ...]
+    python -m policy.portfolio build portfolio-v1 runs/witch runs/militia ... k4-20260614 [--description ...]
     python -m policy.portfolio choose portfolio-v1 Cellar Chapel Moat ... Witch   # who plays?
 
 models/<name>/model.json lists the members (members/<member>.json, each trained by
@@ -107,6 +107,10 @@ class PortfolioPolicy(Policy):
 # -- building a portfolio from specialist runs ---------------------------------------------
 
 def build(name: str, runs: list[str], description: str = "", force: bool = False) -> str:
+    """runs: ga/specialist.py run folders, or names of released ga-strategy models."""
+    from dataclasses import asdict
+    from ga.specialist import complete
+    from policy.registry import read_manifest, resolve
     dst = os.path.join(MODELS_DIR, name)
     if os.path.exists(dst):
         if not force:
@@ -115,12 +119,22 @@ def build(name: str, runs: list[str], description: str = "", force: bool = False
     os.makedirs(os.path.join(dst, "members"))
     rows = []
     for run in runs:
-        prog = json.load(open(os.path.join(run, "progress.json")))
-        member = os.path.basename(os.path.normpath(run))
-        shutil.copy(os.path.join(run, "strategy.json"), os.path.join(dst, "members", member + ".json"))
-        rows.append({"name": member, "file": f"members/{member}.json", "must": prog["must"],
-                     "banned": prog.get("banned", []), "val_score": prog.get("best_val"),
-                     "generations": prog.get("gen")})
+        if os.path.exists(os.path.join(run, "progress.json")):        # a ga/specialist.py run
+            prog = json.load(open(os.path.join(run, "progress.json")))
+            member = os.path.basename(os.path.normpath(run))
+            shutil.copy(os.path.join(run, "strategy.json"), os.path.join(dst, "members", member + ".json"))
+            rows.append({"name": member, "file": f"members/{member}.json", "must": prog["must"],
+                         "banned": prog.get("banned", []), "val_score": prog.get("best_val"),
+                         "generations": prog.get("gen")})
+            continue
+        m = read_manifest(resolve(run))                                # a released ga-strategy model
+        if m.get("kind") != "ga-strategy":
+            raise ValueError(f"{run}: not a specialist run or a ga-strategy model")
+        with open(os.path.join(dst, "members", m["name"] + ".json"), "w") as f:
+            json.dump(asdict(complete(load_strategy(m["path"]))), f, indent=1)
+        rows.append({"name": m["name"], "file": f"members/{m['name']}.json",
+                     "must": sorted(m.get("key_cards") or {}), "banned": [],
+                     "released_model": m["name"]})
     manifest = {"protocol": PROTOCOL_VERSION, "name": name, "kind": KIND,
                 "kingdom": list(KINGDOM_CARDS), "key_cards": {}, "members": rows,
                 "created": datetime.date.today().isoformat(),
@@ -143,7 +157,7 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build", help="release specialist runs as one portfolio model")
     b.add_argument("name")
-    b.add_argument("runs", nargs="+", help="runs/<name> folders of ga/specialist.py")
+    b.add_argument("runs", nargs="+", help="runs/<name> folders of ga/specialist.py, or released models")
     b.add_argument("--description", default="")
     b.add_argument("--force", action="store_true")
     c = sub.add_parser("choose", help="which member plays this kingdom")

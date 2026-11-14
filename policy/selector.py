@@ -7,6 +7,9 @@
     select_model(kingdom)["name"]
 
 Rules, in order:
+  0. A portfolio model (kind "ga-portfolio", policy/portfolio.py) plays any kingdom: it holds
+     specialists for all 26 cards and picks one by playing them all on the dealt kingdom.
+     Best stored score first.
   1. A model trained on exactly this kingdom plays it.
   2. Otherwise a model whose key cards (policy/keycards.py) are all in the kingdom can play
      it, whatever the other cards are; the one with the best stored benchmark score
@@ -25,8 +28,9 @@ import sys
 
 from policy.registry import key_cards, list_models, read_bench
 
-EXACT, KEY_CARDS, PARTIAL = 1, 2, 3
-TIER_NAME = {EXACT: "trained on this kingdom", KEY_CARDS: "key cards all dealt",
+PORTFOLIO, EXACT, KEY_CARDS, PARTIAL = 0, 1, 2, 3
+TIER_NAME = {PORTFOLIO: "portfolio: picks a specialist per kingdom", EXACT: "trained on this kingdom",
+             KEY_CARDS: "key cards all dealt",
              PARTIAL: "some key cards missing"}
 
 
@@ -45,7 +49,9 @@ def rank_models(kingdom: list[str], models: list[dict] | None = None) -> list[di
         keys = key_cards(m)
         bench = read_bench(m)
         score = bench.get("score") if bench else None
-        if m.get("kingdom") and _norm(m["kingdom"]) == dealt:
+        if m.get("kind") == "ga-portfolio":
+            tier, missing, share = PORTFOLIO, [], 1.0
+        elif m.get("kingdom") and _norm(m["kingdom"]) == dealt:
             tier, missing, share = EXACT, [], 1.0
         elif keys is None:
             tier, missing, share = PARTIAL, [], 0.0
@@ -54,7 +60,9 @@ def rank_models(kingdom: list[str], models: list[dict] | None = None) -> list[di
             total = sum(keys.values())
             share = 1.0 if not total else sum(n for c, n in keys.items() if c.title() in dealt) / total
             tier = KEY_CARDS if not missing else PARTIAL
-        if tier == EXACT:
+        if tier == PORTFOLIO:
+            reason = TIER_NAME[PORTFOLIO]
+        elif tier == EXACT:
             reason = "trained on exactly this kingdom"
         elif tier == KEY_CARDS:
             reason = "key cards all dealt: " + (", ".join(keys) if keys else "none needed")
@@ -82,7 +90,7 @@ def best_kingdom(models: list[dict] | None = None) -> tuple[dict, list[str]]:
     kingdom (stored benchmark), and that kingdom. Models are compared on the opponents every
     one of them was benchmarked against there (Witch-BM only plays kingdoms with a Witch)."""
     cands = [m for m in (models if models is not None else list_models())
-             if not m.get("retired") and m.get("kingdom")]
+             if not m.get("retired") and m.get("kingdom") and m.get("kind") != "ga-portfolio"]
     if not cands:
         raise LookupError("no model with a training kingdom")
     train = {}

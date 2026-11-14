@@ -87,3 +87,11 @@ def test_plugin_folder_and_bench_store(tmp_path, monkeypatch):
     bench = read_bench(read_manifest(str(plug / "my-model")))
     assert bench["model"] == "my-model" and 0 <= bench["score"] <= 1
     assert bench["key_cards"] == data["key_cards"]
+
+
+def test_a_portfolio_plays_every_kingdom_but_never_picks_one(tmp_path):
+    exact = fake(tmp_path, "exact", K1, {"Laboratory": 3}, 0.90)
+    port = fake(tmp_path, "port", ["Witch", "Smithy"], {}, 0.70)
+    port["kind"] = "ga-portfolio"
+    assert select_model(K1, [exact, port])["name"] == "port"
+    assert best_kingdom([exact, port])[0]["name"] == "exact"
