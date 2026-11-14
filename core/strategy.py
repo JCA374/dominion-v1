@@ -228,6 +228,26 @@ def big_money_strategy(kingdom: list[str] | None = None) -> Strategy:
     )
 
 
+def _single_card_big_money(card: str, copies: int, kingdom: list[str] | None) -> Strategy:
+    """Big Money plus up to `copies` of one terminal action, bought when Gold is out of reach."""
+    s = big_money_strategy(kingdom)
+    s.early_buy_priority = [card, "Gold", "Silver", "PASS"]
+    s.mid_buy_priority = ["Province", "Gold", card, "Silver", "PASS"]
+    s.terminal_slack = copies  # the terminal-density rule would otherwise stop at one
+    s.buy_targets = {card: copies}
+    return s
+
+
+def smithy_big_money_strategy(kingdom: list[str] | None = None) -> Strategy:
+    """Benchmark: Big Money with two Smithies (needs Smithy in the kingdom)."""
+    return _single_card_big_money("Smithy", 2, kingdom)
+
+
+def witch_big_money_strategy(kingdom: list[str] | None = None) -> Strategy:
+    """Benchmark: Big Money with two Witches (needs Witch in the kingdom)."""
+    return _single_card_big_money("Witch", 2, kingdom)
+
+
 def gardens_strategy(kingdom: list[str] | None = None) -> Strategy:
     """Seed archetype: Gardens rush — buy lots of cheap cards for VP."""
     actions = _action_cards(kingdom)

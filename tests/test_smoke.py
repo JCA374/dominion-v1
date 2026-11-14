@@ -1804,6 +1804,31 @@ def test_c_engine_consistent_with_python():
         f"C={c_result['mean_turns']:.1f}")
 
 
+def test_c_engine_matches_python_with_attacks():
+    """Lopsided matchups using the highest card ids (Witch, Moat) agree between engines.
+
+    A BM mirror is always ~50% in both engines, so it can't catch a broken card.
+    This did: the C supply array was 20 long while Witch/Moat have ids 20/21,
+    so their piles were overwritten and C bought ~25% fewer Witches.
+    """
+    from core.strategy import _single_card_big_money, witch_big_money_strategy
+    from ga.c_bridge import evaluate_vs_opponent_c
+
+    seeds = make_seed_list(300, random.Random(5))
+    cases = [
+        (["Witch"], witch_big_money_strategy(["Witch"]), big_money_strategy(["Witch"])),
+        (["Witch", "Moat"], _single_card_big_money("Moat", 2, ["Witch", "Moat"]),
+         witch_big_money_strategy(["Witch", "Moat"])),
+    ]
+    for kingdom, strat, opp in cases:
+        py = evaluate_vs_opponent(strat, seeds, kingdom, opponent=opp, need_deck=True)
+        c = evaluate_vs_opponent_c(strat, seeds, kingdom, opponent=opp)
+        assert abs(py["win_rate"] - c["win_rate"]) < 0.07, (
+            f"{kingdom}: Python {py['win_rate']:.2f} vs C {c['win_rate']:.2f}")
+        assert abs(py["mean_turns"] - c["mean_turns"]) < 1.0, (
+            f"{kingdom}: Python {py['mean_turns']:.1f} turns vs C {c['mean_turns']:.1f}")
+
+
 # ---------------------------------------------------------------------------
 # Attack cards: Witch, Militia, Moat, Curse
 # ---------------------------------------------------------------------------

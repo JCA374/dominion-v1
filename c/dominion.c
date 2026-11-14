@@ -87,7 +87,7 @@ static int card_special[NUM_CARDS];
 
 /* ── Limits ── */
 #define MAX_DECK   200
-#define MAX_SUPPLY  20
+#define MAX_SUPPLY  NUM_CARDS   /* supply is indexed by card id */
 #define TURN_CAP    40
 
 /* ── PRNG: xorshift64 ── */
