@@ -44,6 +44,7 @@ from policy.protocol import NO_REQUEST_YET
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNS = os.path.join(ROOT, "runs")
 MARGIN_WEIGHT = 0.1
+HALL: dict[str, Strategy] = {}   # extra evolved opponents (--hall), set before the worker pool forks
 
 
 # -- genomes over all 26 cards ---------------------------------------------------------
@@ -97,11 +98,14 @@ def seeds_for(must: list[str], banned: set[str]) -> list[Strategy]:
 
 # -- fitness ----------------------------------------------------------------------------
 
-def make_plan(must: list[str], n_kingdoms: int, n_seeds: int, rng: random.Random) -> list[tuple]:
-    """[(bot name, kingdom, seeds)]: n_kingdoms per bot, each holding must + the bot's card,
-    each with its own seeds (shared seeds replay the same games where the cards don't matter)."""
+def make_plan(must: list[str], n_kingdoms: int, n_seeds: int, rng: random.Random,
+              hall=()) -> list[tuple]:
+    """[(opponent, kingdom, seeds)]: n_kingdoms per bot, each holding must + the bot's card,
+    each with its own seeds (shared seeds replay the same games where the cards don't matter);
+    then n_kingdoms per hall member ("hall:<name>"), holding must."""
     plan = []
-    for name, (_, card) in OPPONENTS.items():
+    opps = [(name, card) for name, (_, card) in OPPONENTS.items()] + [(f"hall:{h}", None) for h in hall]
+    for name, card in opps:
         need = sorted(set(must) | ({card} if card else set()))
         for k in steam_kingdoms(n_kingdoms, rng.getrandbits(32), need):
             plan.append((name, k, [rng.getrandbits(32) for _ in range(n_seeds)]))
@@ -109,17 +113,20 @@ def make_plan(must: list[str], n_kingdoms: int, n_seeds: int, rng: random.Random
 
 
 def score(strategy: Strategy, plan: list[tuple]) -> dict:
-    """Mean score over the bots, per-bot scores and mean VP margin."""
+    """Mean score over all opponents, per-opponent scores, the bots-only mean and the VP margin."""
     per, margin = {}, 0.0
     for name, k, seeds in plan:
-        r = evaluate_vs_opponent_c(strategy, seeds, k, OPPONENTS[name][0](k))
+        opp = HALL[name[5:]] if name.startswith("hall:") else OPPONENTS[name][0](k)
+        r = evaluate_vs_opponent_c(strategy, seeds, k, opp)
         per.setdefault(name, []).append(r["win_rate"] + r["tie_rate"] / 2)
         margin += r["mean_vp_margin"]
     bots = {n: sum(v) / len(v) for n, v in per.items()}
     mean = sum(bots.values()) / len(bots)
     margin /= len(plan)
     fit = (1 - MARGIN_WEIGHT) * mean + MARGIN_WEIGHT * max(0.0, min(1.0, (margin + 20) / 40))
-    return {"fitness": fit, "score": mean, "bots": bots, "margin": margin}
+    only = [v for n, v in bots.items() if n in OPPONENTS]
+    return {"fitness": fit, "score": mean, "bots": bots, "bot_score": sum(only) / len(only),
+            "margin": margin}
 
 
 def _score(args):
@@ -130,11 +137,14 @@ def _score(args):
 
 def run(name: str, must: list[str], gens: int, pop_size: int, n_kingdoms: int, n_seeds: int,
         workers: int, seed: int, banned: set[str], val_every: int, val_kingdoms: int,
-        tier2: int = 8, elites: int = 3, rate: float = 0.18, resume: bool = False) -> dict:
+        tier2: int = 8, elites: int = 3, rate: float = 0.18, resume: bool = False,
+        hall: dict[str, Strategy] | None = None) -> dict:
     out = os.path.join(RUNS, name)
     os.makedirs(out, exist_ok=True)
     rng = random.Random(seed)
-    val_plan = make_plan(must, val_kingdoms, 10, random.Random(f"val:{seed}:{must}"))
+    HALL.clear()
+    HALL.update(hall or {})
+    val_plan = make_plan(must, val_kingdoms, 10, random.Random(f"val:{seed}:{must}"), HALL)
 
     pop = seeds_for(must, banned)
     if resume and os.path.exists(os.path.join(out, "strategy.json")):
@@ -150,15 +160,16 @@ def run(name: str, must: list[str], gens: int, pop_size: int, n_kingdoms: int, n
     stale, t0 = 0, time.time()
     progress = {"name": name, "must": must, "banned": sorted(banned), "gens": gens,
                 "pop": pop_size, "kingdoms_per_bot": n_kingdoms, "seeds": n_seeds,
-                "val_kingdoms_per_bot": val_kingdoms, "started": time.strftime("%Y-%m-%d %H:%M")}
+                "val_kingdoms_per_bot": val_kingdoms, "hall": sorted(hall or {}),
+                "started": time.strftime("%Y-%m-%d %H:%M")}
 
     with Pool(workers) as pool:
         for gen in range(1, gens + 1):
-            plan = make_plan(must, n_kingdoms, n_seeds, rng)
+            plan = make_plan(must, n_kingdoms, n_seeds, rng, HALL)
             res = pool.map(_score, [(s, plan) for s in pop], chunksize=1)
             fit = [r["fitness"] for r in res]
             order = sorted(range(len(pop)), key=lambda i: -fit[i])[:tier2]
-            plan2 = make_plan(must, n_kingdoms * 2, n_seeds * 2, rng)
+            plan2 = make_plan(must, n_kingdoms * 2, n_seeds * 2, rng, HALL)
             res2 = pool.map(_score, [(pop[i], plan2) for i in order], chunksize=1)
             ranked = [order[j] for j in sorted(range(len(order)), key=lambda j: -res2[j]["fitness"])]
             top2 = max(res2, key=lambda r: r["fitness"])
@@ -178,6 +189,7 @@ def run(name: str, must: list[str], gens: int, pop_size: int, n_kingdoms: int, n
                 else:
                     stale += 1
                 history.append({"gen": gen, "val": round(val, 4), "best": round(best_val, 4),
+                                "bot_score": round(vres[j]["bot_score"], 4),
                                 "bots": {k: round(v, 4) for k, v in vres[j]["bots"].items()}})
                 print(f"[{name}] gen {gen:4d}  val {100 * val:5.1f}%  best {100 * best_val:5.1f}%  "
                       f"{' '.join(f'{k} {100 * v:4.1f}%' for k, v in vres[j]['bots'].items())}  "
@@ -232,14 +244,22 @@ def main(argv=None) -> int:
     ap.add_argument("--exclude-blocked", action="store_true",
                     help="never buy the cards the protocol can't play yet (policy/protocol.py)")
     ap.add_argument("--resume", action="store_true", help="seed with the run's current strategy.json")
+    ap.add_argument("--hall", default="",
+                    help="extra opponents: runs/<name> folders or strategy.json files, comma-separated "
+                         "(played on kingdoms with the key cards; they count like a bot)")
     a = ap.parse_args(argv)
     must = [c.strip() for c in a.must.split(",") if c.strip()]
     for c in must:
         if c not in ALL_CARDS:
             ap.error(f"unknown card {c!r}")
     banned = set(NO_REQUEST_YET) if a.exclude_blocked else set()
+    hall = {}
+    for h in (x.strip() for x in a.hall.split(",") if x.strip()):
+        path = h if h.endswith(".json") else os.path.join(h, "strategy.json")
+        hall[os.path.basename(os.path.normpath(h if not h.endswith(".json") else os.path.dirname(h)))] = \
+            load_strategy(path)
     run(a.name, must, a.gens, a.pop, a.kingdoms, a.seeds, a.workers, a.seed, banned,
-        a.val_every, a.val_kingdoms, resume=a.resume)
+        a.val_every, a.val_kingdoms, resume=a.resume, hall=hall)
     return 0
 
 

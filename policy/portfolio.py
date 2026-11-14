@@ -151,6 +151,46 @@ def build(name: str, runs: list[str], description: str = "", force: bool = False
     return dst
 
 
+def evaluate(manifest: dict, n_kingdoms: int = 100, n_seeds: int = 40, banned=NO_REQUEST_YET,
+             compare=("k4-20260614", "k1-steam"), seed: int = 11) -> dict:
+    """How good is the per-kingdom choice? On n random Steam kingdoms: the member the trial
+    picks, scored on fresh games (n_seeds per bot, both seats), against the best member in
+    hindsight (oracle), every member alone and the `compare` models. Score as policy.bench."""
+    from ga.c_bridge import evaluate_vs_opponent_c
+    from ga.specialist import mask
+    from policy.bench import OPPONENTS, STEAM_BASE_SET, kingdom_seeds, load
+    rng = random.Random(seed)
+    strategies = members(manifest)
+    others = {}
+    for ref in compare:
+        try:
+            others[ref] = load(ref)[1]
+        except FileNotFoundError:
+            pass
+    players = {n: mask(s, banned) for n, s in strategies.items()}
+    rows, pick_count = [], {}
+    base = [rng.getrandbits(32) for _ in range(n_seeds)]
+    for i in range(n_kingdoms):
+        k = sorted(rng.sample(STEAM_BASE_SET, 10))
+        seeds = kingdom_seeds(base, i)
+        bots = [b for _, (b, card) in OPPONENTS.items() if card is None or card in k]
+
+        def sc(s):
+            return sum((lambda r: r["win_rate"] + r["tie_rate"] / 2)(
+                evaluate_vs_opponent_c(s, seeds, k, b(k))) for b in bots) / len(bots)
+        true = {n: sc(s) for n, s in players.items()}
+        pick = choose(manifest, k, banned, strategies=strategies)["member"]
+        pick_count[pick] = pick_count.get(pick, 0) + 1
+        rows.append({"kingdom": k, "pick": pick, "picked": true[pick], "oracle": max(true.values()),
+                     "members": true, **{f"model:{r}": sc(s) for r, s in others.items()}})
+    mean = lambda key: sum(r[key] for r in rows) / len(rows)
+    out = {"kingdoms": n_kingdoms, "seeds": n_seeds, "banned": list(banned),
+           "portfolio": mean("picked"), "oracle": mean("oracle"),
+           "members": {n: sum(r["members"][n] for r in rows) / len(rows) for n in players},
+           "models": {r: mean(f"model:{r}") for r in others}, "picks": pick_count, "rows": rows}
+    return out
+
+
 def main(argv=None) -> int:
     from policy.registry import read_manifest, resolve
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -160,6 +200,12 @@ def main(argv=None) -> int:
     b.add_argument("runs", nargs="+", help="runs/<name> folders of ga/specialist.py, or released models")
     b.add_argument("--description", default="")
     b.add_argument("--force", action="store_true")
+    e = sub.add_parser("evaluate", help="choice vs oracle, members alone and old models")
+    e.add_argument("model")
+    e.add_argument("--kingdoms", type=int, default=100)
+    e.add_argument("--seeds", type=int, default=40)
+    e.add_argument("--all-cards", action="store_true", help="members may buy every card")
+    e.add_argument("--json", metavar="FILE")
     c = sub.add_parser("choose", help="which member plays this kingdom")
     c.add_argument("model")
     c.add_argument("kingdom", nargs="+")
@@ -167,6 +213,21 @@ def main(argv=None) -> int:
     if a.cmd == "build":
         dst = build(a.name, a.runs, a.description, a.force)
         print(f"built {a.name} -> {os.path.relpath(dst, ROOT)}")
+        return 0
+    if a.cmd == "evaluate":
+        r = evaluate(read_manifest(resolve(a.model)), a.kingdoms, a.seeds,
+                     () if a.all_cards else NO_REQUEST_YET)
+        pct = lambda x: f"{100 * x:5.1f}%"
+        print(f"{a.kingdoms} random Steam kingdoms x {a.seeds} seeds x 2 seats per bot"
+              f"{' (all cards)' if a.all_cards else ' (blocked cards never bought)'}")
+        print(f"portfolio (trial pick)  {pct(r['portfolio'])}\noracle (best member)    {pct(r['oracle'])}")
+        for n, v in sorted(r["models"].items(), key=lambda x: -x[1]):
+            print(f"model {n:<17} {pct(v)}")
+        for n, v in sorted(r["members"].items(), key=lambda x: -x[1]):
+            print(f"  member {n:<15} {pct(v)}   picked {r['picks'].get(n, 0)}x")
+        if a.json:
+            with open(a.json, "w") as f:
+                json.dump(r, f, indent=1)
         return 0
     r = choose(read_manifest(resolve(a.model)), a.kingdom)
     for n, s in sorted(r["scores"].items(), key=lambda x: -x[1]):
