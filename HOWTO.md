@@ -22,15 +22,16 @@ and the play modes run on the Python engine, so gameplay is identical.
 
 ### Build the C engine first (one-time)
 
-The GA uses a fast C game engine for evaluation (~50x faster than Python).
-Build it before training:
+The GA trains on the shared engine's C twin (`engine/c/engine.c`, ~60x faster than Python)
+with the genome's C agent (`c/ga_agent.c`). Build it before training:
 
 ```bash
 make                        # builds dominion.so
 ```
 
 If `dominion.so` is missing, the system auto-builds it on first run (requires `gcc`).
-Falls back to the Python engine if compilation fails.
+Falls back to the Python engine if compilation fails. Both play identical games
+(`tests/test_agent_parity.py`).
 
 ### Run training
 
@@ -97,35 +98,21 @@ and final deck composition per opponent.
 
 - `python benchmark.py` — measure sequential vs parallel evaluation speed
 - `python viz/plot_evolution.py` — interactive Plotly chart of buy priority evolution
-- `python -m pytest tests/` — run smoke tests
+- `python -m pytest tests/` — run the tests (the rules are tested in `engine/tests`)
 
 ---
 
 ## Kingdom Cards
 
-15 kingdom cards available — configure which to use via `KINGDOM` in `ga/main.py`.
-Two presets are provided: `KINGDOM1` (original 10) and `KINGDOM2` (11 cards with attacks).
+All 26 cards of the base set (2nd edition) are available, with Steam Dominion's rules (8
+Provinces in a 2-player game, Curse pile always in the Supply, no turn limit, ties go to the
+player with fewer turns): see `engine/RULES.md`. Configure the training kingdom via `KINGDOM`
+in `ga/main.py`; presets `KINGDOM1` (original 10) and `KINGDOM2` (11 cards with attacks).
 
-| Card | Cost | Type | Effect |
-|------|------|------|--------|
-| Moat | $2 | Action/Reaction | +2 cards; blocks attacks when in hand |
-| Chapel | $2 | Action | Trash up to 4 cards from hand |
-| Village | $3 | Action | +1 card, +2 actions |
-| Merchant | $3 | Action | +1 card, +1 action; first Silver played = +$1 |
-| Militia | $4 | Action/Attack | +$2; others discard to 3 cards |
-| Smithy | $4 | Action | +3 cards |
-| Throne Room | $4 | Action | Play an action from hand twice |
-| Moneylender | $4 | Action | Trash Copper from hand, +$3 |
-| Gardens | $4 | Victory | 1 VP per 10 cards in deck |
-| Mine | $5 | Action | Trash a treasure, gain one costing up to $3 more to hand |
-| Witch | $5 | Action/Attack | +2 cards; others gain a Curse |
-| Market | $5 | Action | +1 card, +1 action, +1 buy, +$1 |
-| Laboratory | $5 | Action | +2 cards, +1 action |
-| Festival | $5 | Action | +2 actions, +1 buy, +$2 |
-| Council Room | $5 | Action | +4 cards, +1 buy |
-
-When attack cards (Militia, Witch) are in the kingdom, 10 Curse cards (-1 VP each)
-are added to the supply. Moat automatically blocks attacks when in hand.
+The genome decides buys, action order, Chapel/Throne Room/Mine targets and phase timing. The
+other choices (attacks, and Cellar, Harbinger, Vassal, Workshop, Bureaucrat, Poacher, Remodel,
+Library, Sentry, Artisan, Bandit) are fixed heuristics on the same priority lists, in
+`core/agent.py` (Python) and `c/ga_agent.c` (C), which must stay identical.
 
 ## Strategy Genome
 
@@ -159,16 +146,19 @@ Training uses a **hall of fame** system for robust evaluation:
 ## Project Structure
 
 ```
-core/               Game foundation
-  cards.py          Card definitions (22 cards) + integer ID mappings
-  engine.py         Python game engine — used by interactive play modes
-  strategy.py       Strategy genome (4 phases), I/O, summaries
+engine/             git submodule JCA374/dominion-engine: the rules (Python + C), see its README
+
+core/               The genome and its agent
+  cards.py          Card facts from the engine, in the shape the genome code uses
+  agent.py          GAAgent: answers every engine decision from a Strategy
+  engine.py         play_game_2p(): genomes against each other on the Python engine
+  strategy.py       Strategy genome (3 phases), I/O, summaries
 
 ga/                 GA training pipeline
   main.py           GA entry point + config (kingdom presets, hall settings)
   ga.py             Selection, crossover, mutation, hall of fame persistence
   fitness.py        Game simulation and win-rate evaluation (auto-uses C engine)
-  c_bridge.py       Python-C bridge (ctypes), strategy serialization
+  c_bridge.py       Builds dominion.so (engine/c + c/ga_agent.c), genome serialization
 
 play/               Interactive play modes
   terminal.py       Terminal interactive play
@@ -191,12 +181,13 @@ policy/             Stable interface for players (Steam autopilot) — see docs/
 models/             Released, immutable models (model.json + strategy.json)
 best_model/         Live output of the current training run
 
-c/                  C engine source
-  dominion.c        C game engine — fast evaluation for GA training (~50x faster)
-  Makefile          Builds dominion.so
+c/
+  ga_agent.c        The genome as a C agent of the engine (twin of core/agent.py)
 
 tests/
-  test_smoke.py     Smoke tests for all components
+  test_ga.py        Genome, GA operators, fitness, hall of fame, C bridge
+  test_agent.py     What the genome decides, on hand-made positions
+  test_agent_parity.py  Python and C agents play identical games
   test_policy.py    Protocol, registry and released-model conformance
 
 docs/               PROTOCOL.md, REPORT.md, baseline.md, plans/

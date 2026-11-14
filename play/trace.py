@@ -1,4 +1,4 @@
-"""Game trace — watch the AI model play turn-by-turn.
+"""Game trace — watch the AI model play turn-by-turn (on the shared engine, engine/).
 
 Usage:
     python trace.py                    # best model vs Big Money
@@ -19,19 +19,14 @@ import random
 import re
 from collections import Counter
 
-from core.cards import ALL_CARDS, CardType, KINGDOM_CARDS
-from core.engine import (
-    GameState, default_supply, draw_cards, cleanup,
-    is_game_over, count_vp, resolve_action, apply_action_effects,
-    auto_play_treasures, buy_card, trash_card,
-    play_moneylender, play_chapel, play_mine, _new_player,
-    play_militia, play_witch, militia_discard, _has_moat,
-)
-from core.strategy import (
-    Strategy, load_strategy, big_money_strategy,
-    get_current_phase, get_buy_priority, get_nonterminal_priority,
-    get_terminal_priority, get_chapel_trash_priority,
-)
+import core  # noqa: F401
+from core.agent import GAAgent
+from core.cards import ALL_CARDS, CardType
+from core.strategy import Strategy, big_money_strategy, get_current_phase, load_strategy
+from dominion_engine import Game
+from dominion_engine import cards as K
+from dominion_engine import game as G
+from play.terminal import model_kingdom
 
 
 # ---------------------------------------------------------------------------
@@ -40,360 +35,56 @@ from core.strategy import (
 
 WIDTH = 90          # total terminal width
 COL = 42            # width of each player column
-GAP = WIDTH - 2 * COL  # center gap
 
-
-# ---------------------------------------------------------------------------
-# Formatting helpers
-# ---------------------------------------------------------------------------
 
 def _left(text: str) -> str:
-    """Left-aligned line (player 1)."""
     return text[:COL].ljust(COL)
 
 
 def _right(text: str) -> str:
-    """Right-aligned line (player 2)."""
     return " " * (WIDTH - COL) + text[:COL]
 
 
 def _wrap(text: str, max_width: int, indent: int = 4) -> list[str]:
-    """Break text into lines that fit within max_width."""
-    if len(text) <= max_width:
-        return [text]
-    lines = []
-    while len(text) > max_width:
-        # Find a break point (comma or space)
-        cut = max_width
-        for sep in [", ", " "]:
-            pos = text.rfind(sep, 0, max_width)
-            if pos > indent:
-                cut = pos + len(sep)
-                break
-        lines.append(text[:cut])
-        text = " " * indent + text[cut:]
-    if text.strip():
-        lines.append(text)
-    return lines
+    words, lines, line = text.split(" "), [], ""
+    for w in words:
+        if line and len(line) + 1 + len(w) > max_width:
+            lines.append(line)
+            line = " " * indent + w
+        else:
+            line = f"{line} {w}" if line else w
+    return lines + [line] if line else lines
 
 
 def _center(text: str) -> str:
-    """Center-aligned line."""
     return text.center(WIDTH)
 
 
-def _hand_str(hand: list[str]) -> str:
-    counts = Counter(hand)
+def _hand_str(cards: list[int]) -> str:
     parts = []
-    for card, n in sorted(counts.items(), key=lambda x: -ALL_CARDS[x[0]].cost):
-        tag = {"TREASURE": "$", "VICTORY": "V", "ACTION": "A"}[ALL_CARDS[card].card_type.name]
-        if n > 1:
-            parts.append(f"{n}x{card}({tag})")
-        else:
-            parts.append(f"{card}({tag})")
+    for c, n in sorted(Counter(cards).items(), key=lambda x: -K.CARDS[x[0]].cost):
+        card = K.CARDS[c]
+        tag = "A" if card.is_action else "$" if card.is_treasure else "V"
+        parts.append(f"{n}x{card.name}({tag})" if n > 1 else f"{card.name}({tag})")
     return ", ".join(parts)
 
 
-def _deck_summary_by_type(state: GameState) -> tuple[str, str, str]:
-    """Return (vp_line, treasure_line, action_line) for the final deck."""
-    all_cards = state.deck + state.hand + state.discard + state.play_area
-    counts = Counter(all_cards)
+def _deck_summary_by_type(cards: list[int]) -> tuple[str, str, str]:
     vp, treasure, action = [], [], []
-    for card_name, n in counts.most_common():
-        card = ALL_CARDS[card_name]
-        entry = f"{n}x{card_name}" if n > 1 else card_name
-        if card.card_type == CardType.VICTORY:
-            vp.append(entry)
-        elif card.card_type == CardType.TREASURE:
-            treasure.append(entry)
-        else:
-            action.append(entry)
-    return (", ".join(vp) or "—",
-            ", ".join(treasure) or "—",
-            ", ".join(action) or "—")
+    for c, n in Counter(cards).most_common():
+        card = K.CARDS[c]
+        entry = f"{n}x{card.name}" if n > 1 else card.name
+        (action if card.is_action else treasure if card.is_treasure else vp).append(entry)
+    return ", ".join(vp) or "—", ", ".join(treasure) or "—", ", ".join(action) or "—"
 
 
-# ---------------------------------------------------------------------------
-# Traced phases — collect lines instead of printing directly
-# ---------------------------------------------------------------------------
-
-def _traced_attack(state: GameState, card_name: str,
-                   opponents: list[tuple[GameState, Strategy]] | None) -> list[str]:
-    """Resolve attack effects and return trace lines."""
-    lines = []
-    if not opponents:
-        return lines
-    special = ALL_CARDS[card_name].special
-    for opp_state, opp_strat in opponents:
-        if special == "militia":
-            if _has_moat(opp_state):
-                lines.append("  opponent reveals Moat — blocked!")
-            else:
-                before = len(opp_state.hand)
-                militia_discard(opp_state, opp_strat)
-                lines.append(f"  opponent discards {before - len(opp_state.hand)} card(s) to {len(opp_state.hand)}")
-        elif special == "witch":
-            if _has_moat(opp_state):
-                lines.append("  opponent reveals Moat — blocked!")
-            elif state.supply.get("Curse", 0) > 0:
-                state.supply["Curse"] -= 1
-                opp_state.discard.append("Curse")
-                lines.append(f"  opponent gains Curse ({state.supply['Curse']} left)")
-            else:
-                lines.append("  (no Curses left)")
-    return lines
-
-
-def _traced_action_tier(state: GameState, strategy: Strategy,
-                        priority: list[str], phase: str,
-                        opponents: list[tuple[GameState, Strategy]] | None = None) -> list[str]:
-    """Play one tier of actions, return trace lines."""
-    lines = []
-    while state.actions > 0:
-        played = False
-        for card_name in priority:
-            if card_name in state.hand and state.actions > 0:
-                newly_drawn = resolve_action(state, card_name)
-
-                card = ALL_CARDS[card_name]
-                effects = []
-                if card.cards_drawn:
-                    effects.append(f"+{card.cards_drawn} card{'s' if card.cards_drawn > 1 else ''}")
-                if card.actions:
-                    effects.append(f"+{card.actions} action{'s' if card.actions > 1 else ''}")
-                if card.buys:
-                    effects.append(f"+{card.buys} buy{'s' if card.buys > 1 else ''}")
-                if card.coins:
-                    effects.append(f"+${card.coins}")
-                effect_str = ", ".join(effects)
-                lines.append(f"PLAY {card_name} ({effect_str})")
-
-                if newly_drawn:
-                    lines.append(f"  drew: {', '.join(newly_drawn)}")
-
-                if card.special == "chapel":
-                    lines.extend(traced_chapel(state, strategy, phase))
-                elif card.special == "moneylender":
-                    if play_moneylender(state):
-                        lines.append("  TRASH Copper (+$3)")
-                    else:
-                        lines.append("  (no Copper to trash)")
-                elif card.special == "throne_room":
-                    lines.extend(traced_throne_room(state, strategy, phase, opponents))
-                elif card.special == "mine":
-                    result = play_mine(state, strategy)
-                    if result:
-                        lines.append(f"  TRASH {result[0]} -> gain {result[1]}")
-                    else:
-                        lines.append("  (nothing to upgrade)")
-                elif card.special in ("militia", "witch"):
-                    lines.extend(_traced_attack(state, card_name, opponents))
-
-                played = True
-                break
-        if not played:
-            break
-    return lines
-
-
-def traced_action_phase(state: GameState, strategy: Strategy,
-                        opponents: list[tuple[GameState, Strategy]] | None = None) -> list[str]:
-    """Play action phase: non-terminals first, then terminals."""
-    phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
-    nt_prio = get_nonterminal_priority(strategy)
-    t_prio = get_terminal_priority(strategy)
-    lines = []
-    # Tier 1: non-terminals
-    lines.extend(_traced_action_tier(state, strategy, nt_prio, phase, opponents))
-    # Tier 2: terminals (only if actions remain)
-    if state.actions > 0:
-        lines.extend(_traced_action_tier(state, strategy, t_prio, phase, opponents))
-    return lines
-
-
-def traced_chapel(state: GameState, strategy: Strategy,
-                  phase: str = "early") -> list[str]:
-    lines = []
-    chapel_trash_priority = get_chapel_trash_priority(strategy, phase)
-    max_trash = min(strategy.chapel_max_trash, 4)
-    trashed = 0
-    for card_name in chapel_trash_priority:
-        if card_name == "STOP" or trashed >= max_trash:
-            break
-        while card_name in state.hand and trashed < max_trash:
-            trash_card(state, card_name)
-            trashed += 1
-            lines.append(f"TRASH {card_name}")
-    if trashed == 0:
-        lines.append("TRASH nothing")
-    return lines
-
-
-def traced_throne_room(state: GameState, strategy: Strategy,
-                       phase: str = "mid",
-                       opponents: list[tuple[GameState, Strategy]] | None = None) -> list[str]:
-    """Choose best action from hand, play it twice, return trace lines."""
-    lines = []
-    # Pick highest-priority action using throne_room_priority
-    target = None
-    for card_name in strategy.throne_room_priority:
-        if card_name in state.hand and ALL_CARDS[card_name].card_type == CardType.ACTION:
-            target = card_name
-            break
-    if target is None:
-        lines.append("  (no action to double)")
-        return lines
-
-    lines.append(f"  doubles: {target}")
-    state.hand.remove(target)
-    state.play_area.append(target)
-
-    target_card = ALL_CARDS[target]
-    for i in range(2):
-        tag = "1st" if i == 0 else "2nd"
-        newly_drawn = apply_action_effects(state, target)
-
-        effects = []
-        if target_card.cards_drawn:
-            effects.append(f"+{target_card.cards_drawn} card{'s' if target_card.cards_drawn > 1 else ''}")
-        if target_card.actions:
-            effects.append(f"+{target_card.actions} action{'s' if target_card.actions > 1 else ''}")
-        if target_card.buys:
-            effects.append(f"+{target_card.buys} buy{'s' if target_card.buys > 1 else ''}")
-        if target_card.coins:
-            effects.append(f"+${target_card.coins}")
-        lines.append(f"  [{tag}] {', '.join(effects)}")
-
-        if newly_drawn:
-            lines.append(f"    drew: {', '.join(newly_drawn)}")
-
-        if target_card.special == "chapel":
-            lines.extend(traced_chapel(state, strategy, phase))
-        elif target_card.special == "moneylender":
-            if play_moneylender(state):
-                lines.append("    TRASH Copper (+$3)")
-            else:
-                lines.append("    (no Copper to trash)")
-        elif target_card.special == "mine":
-            result = play_mine(state, strategy)
-            if result:
-                lines.append(f"    TRASH {result[0]} -> gain {result[1]}")
-            else:
-                lines.append("    (nothing to upgrade)")
-        elif target_card.special in ("militia", "witch"):
-            lines.extend(_traced_attack(state, target, opponents))
-
-    return lines
-
-
-def traced_buy_phase(state: GameState, strategy: Strategy) -> list[str]:
-    lines = []
-    treasures = auto_play_treasures(state)
-
-    if treasures:
-        counts = Counter(treasures)
-        parts = [f"{n}x{c}" for c, n in counts.most_common()]
-        lines.append(f"${state.coins} ({', '.join(parts)})")
-
-    phase = get_current_phase(state.turn, state.supply["Province"], strategy.transitions)
-    buy_priority = get_buy_priority(strategy, phase)
-
-    buy_targets = strategy.buy_targets
-    owned: dict[str, int] = {}
-    for c in state.deck + state.hand + state.discard + state.play_area:
-        owned[c] = owned.get(c, 0) + 1
-
-    # Terminal-density rule
-    extra_action_capacity = 0
-    terminals_owned = 0
-    for card_name, count in owned.items():
-        if card_name not in ALL_CARDS:
-            continue
-        card = ALL_CARDS[card_name]
-        if card.card_type == CardType.ACTION:
-            extra_action_capacity += count * max(0, card.actions - 1)
-            if card.actions == 0 and card_name != "Throne Room":
-                terminals_owned += count
-
-    bought_any = False
-    while state.buys > 0:
-        bought = False
-        for card_name in buy_priority:
-            if card_name == "PASS":
-                if not bought_any:
-                    lines.append("BUY nothing (PASS)")
-                state.buys = 0
-                bought = True  # suppress "BUY nothing" fallback
-                break
-            if (card_name in state.supply
-                    and state.supply[card_name] > 0
-                    and ALL_CARDS[card_name].cost <= state.coins):
-                if card_name in buy_targets:
-                    if owned.get(card_name, 0) >= buy_targets[card_name]:
-                        continue
-                # Terminal-density rule
-                card = ALL_CARDS[card_name]
-                if (card.card_type == CardType.ACTION
-                        and card.actions == 0
-                        and card_name != "Throne Room"
-                        and terminals_owned >= extra_action_capacity + strategy.terminal_slack):
-                    continue
-                cost = ALL_CARDS[card_name].cost
-                buy_card(state, card_name)
-                owned[card_name] = owned.get(card_name, 0) + 1
-                # Update terminal-density counts
-                if card.card_type == CardType.ACTION:
-                    extra_action_capacity += max(0, card.actions - 1)
-                    if card.actions == 0 and card_name != "Throne Room":
-                        terminals_owned += 1
-                target_str = ""
-                if card_name in buy_targets:
-                    target_str = f" [{owned[card_name]}/{buy_targets[card_name]}]"
-                lines.append(f"BUY {card_name} (${cost}){target_str}")
-                bought = True
-                bought_any = True
-                break
-        if not bought:
-            if not bought_any:
-                lines.append(f"BUY nothing (${state.coins})")
-            break
-
-    return lines
-
-
-# ---------------------------------------------------------------------------
-# Turn rendering
-# ---------------------------------------------------------------------------
-
-def _render_turn(lines: list[str], side: str) -> None:
-    """Print turn lines aligned to left or right side."""
-    for line in lines:
-        wrapped = _wrap("  " + line, COL)
-        for part in wrapped:
-            if side == "left":
-                print(_left(part))
-            else:
-                print(_right(part))
-
-
-def _play_turn(player: GameState, strategy: Strategy, phase: str,
-               opponents: list[tuple[GameState, Strategy]] | None = None) -> list[str]:
-    """Execute one turn and return all trace lines."""
-    lines = []
-
-    # Hand
-    lines.append(f"Hand: {_hand_str(player.hand)}")
-    total = len(player.deck) + len(player.hand) + len(player.discard) + len(player.play_area)
-    lines.append(f"Deck: {total} cards ({len(player.deck)} draw)")
-
-    # Action phase
-    lines.extend(traced_action_phase(player, strategy, opponents))
-
-    # Buy phase
-    lines.extend(traced_buy_phase(player, strategy))
-
-    cleanup(player)
-    return lines
+VERBS = {G.PLAY_ACTION: "Play", G.THRONE: "Throne Room ×2", G.CHAPEL_TRASH: "Chapel trashes",
+         G.MONEYLENDER_TRASH: "Moneylender trashes", G.MINE_TRASH: "Mine trashes", G.MINE_GAIN: "Mine gains",
+         G.REMODEL_TRASH: "Remodel trashes", G.REMODEL_GAIN: "Remodel gains", G.WORKSHOP_GAIN: "Workshop gains",
+         G.ARTISAN_GAIN: "Artisan gains", G.ARTISAN_TOPDECK: "Artisan topdecks", G.CELLAR_DISCARD: "Cellar discards",
+         G.HARBINGER_TOPDECK: "Harbinger topdecks", G.VASSAL_PLAY: "Vassal plays", G.LIBRARY_SKIP: "Library skips",
+         G.SENTRY_TOP: "Sentry tops", G.POACHER_DISCARD: "Poacher discards", G.MILITIA_DISCARD: "discards",
+         G.BUREAUCRAT_TOPDECK: "topdecks", G.BANDIT_TRASH: "loses"}
 
 
 # ---------------------------------------------------------------------------
@@ -404,102 +95,84 @@ def trace_game(strategy1: Strategy, strategy2: Strategy,
                label1: str = "Model", label2: str = "Opponent",
                kingdom: list[str] | None = None,
                seed: int | None = None) -> dict:
-    if kingdom is None:
-        kingdom = KINGDOM_CARDS
-    if seed is None:
-        seed = random.randint(0, 2**31)
+    kingdom = kingdom or model_kingdom(strategy1)
+    seed = random.randint(0, 2**31) if seed is None else seed
+    g = Game(kingdom, seed)
+    agents = [GAAgent(strategy1), GAAgent(strategy2)]
+    labels, strategies = [label1, label2], [strategy1, strategy2]
 
-    rng = random.Random(seed)
-    supply = default_supply(kingdom, num_players=2)
-
-    p1 = _new_player(random.Random(rng.randint(0, 2**31)))
-    p2 = _new_player(random.Random(rng.randint(0, 2**31)))
-    p1.supply = supply
-    p2.supply = supply
-
-    labels = [label1, label2]
-    strategies = [strategy1, strategy2]
-    players = [p1, p2]
-    sides = ["left", "right"]
-
-    # Header
     print()
     print("=" * WIDTH)
     print(_center(f"GAME TRACE  (seed={seed})"))
-    print(_center(f"Kingdom: {', '.join(kingdom)}"))
+    print(_center(f"Kingdom: {', '.join(sorted(kingdom))}"))
     print("=" * WIDTH)
     print()
-
-    # Column headers
     print(_left(f"  {label1}") + _right(f"  {label2}").lstrip())
     print(_left("  " + "─" * (COL - 2)) + _right("  " + "─" * (COL - 2)).lstrip())
     print()
 
-    round_num = 0
-    while True:
-        round_num += 1
+    lines: list[str] = []
+    key = None
 
-        for i, (player, strategy) in enumerate(zip(players, strategies)):
-            if is_game_over(player, turn_cap=40):
-                print()
-                return _game_result(p1, p2, round_num - 1, label1, label2)
+    def flush():
+        if key is None:
+            return
+        who = key[0]
+        if who == 0:
+            print(_center(f"── Turn {key[1] + 1} ──"))
+        for line in lines:
+            for part in _wrap("  " + line, COL):
+                print(_left(part) if who == 0 else _right(part))
+        print()
 
-            player.turn = round_num
-            player.actions = 1
-            player.buys = 1
-            player.coins = 0
+    gen = g.run()
+    try:
+        d = next(gen)
+        while True:
+            cur = (g.current, g.players[g.current].turns)
+            if cur != key:
+                flush()
+                key, lines = cur, []
+                p = g.players[g.current]
+                phase = get_current_phase(p.turns + 1, g.provinces_left, strategies[g.current].transitions)
+                lines += [f"[{phase}] {g.provinces_left} Prov left",
+                          f"Hand: {_hand_str(p.hand + p.play)}"]
+            ans = agents[d.player].decide(g, d)
+            if d.kind == G.BUY:
+                if ans >= 0:
+                    lines.append(f"Buy {K.NAME[ans]} (${g.coins})")
+                elif not any("Buy" in x for x in lines[2:]):
+                    lines.append(f"Buy nothing (${g.coins})")
+            elif d.kind == G.SENTRY_CARD:
+                lines.append(f"Sentry: {['trash', 'discard', 'keep'][ans]} {K.NAME[d.subject]}")
+            elif ans >= 0:
+                who = "" if d.player == g.current else f"{labels[d.player]} "
+                lines.append(f"{who}{VERBS[d.kind]} {K.NAME[ans]}")
+            d = gen.send(ans)
+    except StopIteration as stop:
+        r = stop.value
+    flush()
+    return _game_result(r, labels)
 
-            phase = get_current_phase(
-                player.turn, player.supply["Province"],
-                strategy.transitions,
-            )
-            provs = player.supply["Province"]
 
-            # Build opponents list for attack resolution
-            opponents = [(players[j], strategies[j])
-                         for j in range(len(players)) if j != i]
-
-            # Turn header in center for first player, skip for second
-            if i == 0:
-                print(_center(f"── Turn {round_num} · {provs} Prov left ──"))
-
-            # Phase label
-            side = sides[i]
-            turn_lines = [f"[{phase}]"]
-            turn_lines.extend(_play_turn(player, strategy, phase, opponents))
-            _render_turn(turn_lines, side)
-            print()
-
-
-def _game_result(p1, p2, turns, label1, label2):
-    vp1 = count_vp(p1)
-    vp2 = count_vp(p2)
-
+def _game_result(r, labels):
     print("=" * WIDTH)
-    print(_center(f"GAME OVER  ·  {turns} turns"))
+    print(_center(f"GAME OVER  ·  {r.turns[0]} turns"))
     print("=" * WIDTH)
     print()
-    print(_left(f"  {label1}: {vp1} VP") + _right(f"  {label2}: {count_vp(p2)} VP").lstrip())
+    print(_left(f"  {labels[0]}: {r.scores[0]} VP") + _right(f"  {labels[1]}: {r.scores[1]} VP").lstrip())
     print()
-
-    # Deck breakdowns side by side: VP, Treasure, Action rows
-    d1 = _deck_summary_by_type(p1)
-    d2 = _deck_summary_by_type(p2)
-    for label, row1, row2 in [("VP", d1[0], d2[0]),
-                               ("$", d1[1], d2[1]),
-                               ("A", d1[2], d2[2])]:
+    d1, d2 = _deck_summary_by_type(r.decks[0]), _deck_summary_by_type(r.decks[1])
+    for label, row1, row2 in [("VP", d1[0], d2[0]), ("$", d1[1], d2[1]), ("A", d1[2], d2[2])]:
         print(_left(f"  {label}: {row1}") + _right(f"  {label}: {row2}").lstrip())
-
     print()
-    if vp1 > vp2:
-        print(_center(f">>> {label1} wins! <<<"))
-    elif vp2 > vp1:
-        print(_center(f">>> {label2} wins! <<<"))
-    else:
+    if len(r.winners) == 2:
         print(_center(">>> Tie! <<<"))
+    else:
+        tb = " (fewer turns)" if r.scores[0] == r.scores[1] else ""
+        print(_center(f">>> {labels[r.winners[0]]} wins{tb}! <<<"))
     print()
-
-    return {"vp1": vp1, "vp2": vp2, "turns": turns}
+    return {"vp1": r.scores[0], "vp2": r.scores[1], "turns": r.turns[0], "winners": r.winners}
 
 
 # ---------------------------------------------------------------------------
@@ -586,7 +259,7 @@ def _eval_vs_opponents(strategy: Strategy, opponents: list[tuple[Strategy, str]]
     from core.engine import play_game_2p
 
     if kingdom is None:
-        kingdom = KINGDOM_CARDS
+        kingdom = model_kingdom(strategy)
 
     if not opponents:
         print("No opponents found.")
@@ -624,8 +297,8 @@ def _eval_vs_opponents(strategy: Strategy, opponents: list[tuple[Strategy, str]]
             r = play_game_2p(strategy, opp_strat, s, kingdom)
             total_turns += r["turns"]
             total_vp_margin += r["vp1"] - r["vp2"]
-            if r["vp1"] > r["vp2"]: wins += 1
-            elif r["vp1"] == r["vp2"]: ties += 1
+            if r["winners"] == [0]: wins += 1
+            elif len(r["winners"]) == 2: ties += 1
             for card in r["deck1"]:
                 deck_counts[card] = deck_counts.get(card, 0) + 1
             n_games += 1
@@ -634,8 +307,8 @@ def _eval_vs_opponents(strategy: Strategy, opponents: list[tuple[Strategy, str]]
             r = play_game_2p(opp_strat, strategy, s, kingdom)
             total_turns += r["turns"]
             total_vp_margin += r["vp2"] - r["vp1"]
-            if r["vp2"] > r["vp1"]: wins += 1
-            elif r["vp2"] == r["vp1"]: ties += 1
+            if r["winners"] == [1]: wins += 1
+            elif len(r["winners"]) == 2: ties += 1
             for card in r["deck2"]:
                 deck_counts[card] = deck_counts.get(card, 0) + 1
             n_games += 1

@@ -1,212 +1,106 @@
-"""Python-C bridge for the fast Dominion engine.
+"""Training on the fast engine: engine/c/engine.c + c/ga_agent.c built into dominion.so.
 
-Loads dominion.so via ctypes and provides drop-in replacements for
-evaluate_vs_opponent() that run ~50-100x faster than pure Python.
+evaluate_vs_opponent_c() is the C path of fitness.evaluate_vs_opponent (same games as the
+Python agent, ~50x faster).
 """
-
 from __future__ import annotations
 
 import ctypes
 import os
-import subprocess
 from typing import TYPE_CHECKING
 
-from core.cards import (
-    ALL_CARDS, CARD_ID, NUM_CARDS, PASS_ID, STOP_ID,
-    CARD_COST, CARD_COINS, CARD_VP, CARD_DRAW,
-    CARD_ACTIONS, CARD_BUYS, CARD_TYPE_ID, CARD_SPECIAL_ID,
-    KINGDOM_CARDS,
-)
+import core  # noqa: F401  (puts engine/ on sys.path)
+from core.agent import PASS, STOP, _ids
+from core.cards import CARD_ID, KINGDOM_CARDS, NUM_CARDS
+from dominion_engine import fast
 
 if TYPE_CHECKING:
     from core.strategy import Strategy
 
-# ── Build and load the shared library ──
+_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_lib = ctypes.CDLL(fast.build(os.path.join(_root, "dominion.so"),
+                              [os.path.join(_root, "c", "ga_agent.c")]))
 
-_dir = os.path.dirname(os.path.abspath(__file__))
-_root = os.path.dirname(_dir)
-_so_path = os.path.join(_root, "dominion.so")
-_c_path = os.path.join(_root, "c", "dominion.c")
+_I = ctypes.POINTER(ctypes.c_int)
+_lib.ga_strategy_size.restype = ctypes.c_int
+_lib.ga_play_one.argtypes = [_I, _I, ctypes.c_uint64, _I, ctypes.c_int, _I,
+                             ctypes.POINTER(ctypes.c_uint64)]
+_lib.ga_play_batch.argtypes = [_I, _I, ctypes.POINTER(ctypes.c_uint64), ctypes.c_int, _I,
+                               ctypes.c_int, _I, _I, _I, _I, _I]
 
-
-def _ensure_built():
-    """Auto-build dominion.so if missing or stale."""
-    if not os.path.exists(_so_path) or \
-       os.path.getmtime(_c_path) > os.path.getmtime(_so_path):
-        subprocess.check_call(["make", "-C", os.path.join(_root, "c")],
-                              stdout=subprocess.DEVNULL)
-
-
-_ensure_built()
-_lib = ctypes.CDLL(_so_path)
-
-# ── Set up function signatures ──
-
-_lib.init_cards.argtypes = [ctypes.POINTER(ctypes.c_int)]
-_lib.init_cards.restype = None
-
-_lib.play_games_batch.argtypes = [
-    ctypes.POINTER(ctypes.c_int),      # strat1
-    ctypes.POINTER(ctypes.c_int),      # strat2
-    ctypes.POINTER(ctypes.c_uint64),   # seeds
-    ctypes.c_int,                      # num_games
-    ctypes.POINTER(ctypes.c_int),      # kingdom_ids
-    ctypes.c_int,                      # kingdom_n
-    ctypes.POINTER(ctypes.c_int),      # out_vp1
-    ctypes.POINTER(ctypes.c_int),      # out_vp2
-    ctypes.POINTER(ctypes.c_int),      # out_turns
-    ctypes.POINTER(ctypes.c_int),      # out_actions1
-]
-_lib.play_games_batch.restype = None
-
-# ── Initialize card data once ──
-
-_card_data = (ctypes.c_int * (NUM_CARDS * 8))()
-for _name, _cid in CARD_ID.items():
-    if _cid >= NUM_CARDS:
-        continue
-    _base = _cid * 8
-    _card_data[_base + 0] = CARD_COST[_cid]
-    _card_data[_base + 1] = CARD_COINS[_cid]
-    _card_data[_base + 2] = CARD_VP[_cid]
-    _card_data[_base + 3] = CARD_DRAW[_cid]
-    _card_data[_base + 4] = CARD_ACTIONS[_cid]
-    _card_data[_base + 5] = CARD_BUYS[_cid]
-    _card_data[_base + 6] = CARD_TYPE_ID[_cid]
-    _card_data[_base + 7] = CARD_SPECIAL_ID[_cid]
-_lib.init_cards(_card_data)
+# Genome layout (= c/ga_agent.c)
+LIST = 40
+STRATEGY_SIZE = _lib.ga_strategy_size()
+_BUY, _NT, _T, _CHAPEL = 5, 5 + 3 * LIST, 5 + 4 * LIST, 5 + 5 * LIST
+_THRONE, _MINE, _TARGETS = 5 + 8 * LIST, 5 + 9 * LIST, 5 + 10 * LIST
+assert _TARGETS + NUM_CARDS == STRATEGY_SIZE
 
 
-# ── Strategy serialization ──
-
-# Strategy layout constants (must match dominion.c)
-STRATEGY_SIZE = 139
-
-
-def _name_to_id(name: str) -> int:
-    """Convert card name to integer ID, handling PASS and STOP."""
-    if name == "PASS":
-        return PASS_ID
-    if name == "STOP":
-        return STOP_ID
-    return CARD_ID[name]
-
-
-def _write_list(buf: list[int], offset: int, names: list[str], max_len: int) -> None:
-    """Write a -1 terminated list of card IDs into buffer at offset."""
-    i = 0
-    for name in names:
-        if i >= max_len - 1:  # leave room for sentinel
-            break
-        buf[offset + i] = _name_to_id(name)
-        i += 1
-    buf[offset + i] = -1
+def _write(buf: list[int], offset: int, names: list[str]) -> None:
+    ids = _ids(names)[:LIST - 1]
+    buf[offset:offset + len(ids)] = ids
+    buf[offset + len(ids)] = -1
 
 
 def strategy_to_ints(strategy: Strategy) -> ctypes.Array:
-    """Serialize a Strategy to a flat int array for the C engine."""
-    buf = [0] * STRATEGY_SIZE
-
-    # Scalar fields
-    buf[0] = strategy.transitions.early_to_mid_turn
-    buf[1] = strategy.transitions.mid_to_late_provinces
-    buf[2] = strategy.transitions.mid_to_late_turn
-    buf[3] = strategy.chapel_max_trash
-    buf[4] = strategy.terminal_slack
-
-    # Priority lists
-    _write_list(buf, 5, strategy.early_buy_priority, 20)
-    _write_list(buf, 25, strategy.mid_buy_priority, 20)
-    _write_list(buf, 45, strategy.late_buy_priority, 20)
-    _write_list(buf, 65, strategy.nonterminal_priority, 8)
-    _write_list(buf, 73, strategy.terminal_priority, 12)
-    _write_list(buf, 85, strategy.early_chapel_trash, 6)
-    _write_list(buf, 91, strategy.mid_chapel_trash, 6)
-    _write_list(buf, 97, strategy.late_chapel_trash, 6)
-    _write_list(buf, 103, strategy.throne_room_priority, 12)
-    _write_list(buf, 115, strategy.mine_trash_priority, 4)
-
-    # Buy targets: pairs of (card_id, max_count), -1 terminated
-    offset = 119
-    for card_name, max_count in strategy.buy_targets.items():
-        if card_name in CARD_ID and offset < 137:
-            buf[offset] = CARD_ID[card_name]
-            buf[offset + 1] = max_count
-            offset += 2
-    buf[offset] = -1
-
-    arr = (ctypes.c_int * STRATEGY_SIZE)(*buf)
-    return arr
+    buf = [-1] * STRATEGY_SIZE
+    t = strategy.transitions
+    buf[0:5] = [t.early_to_mid_turn, t.mid_to_late_provinces, t.mid_to_late_turn,
+                strategy.chapel_max_trash, strategy.terminal_slack]
+    for i, lst in enumerate([strategy.early_buy_priority, strategy.mid_buy_priority,
+                             strategy.late_buy_priority]):
+        _write(buf, _BUY + i * LIST, lst)
+    _write(buf, _NT, strategy.nonterminal_priority)
+    _write(buf, _T, strategy.terminal_priority)
+    for i, lst in enumerate([strategy.early_chapel_trash, strategy.mid_chapel_trash,
+                             strategy.late_chapel_trash]):
+        _write(buf, _CHAPEL + i * LIST, lst)
+    _write(buf, _THRONE, strategy.throne_room_priority)
+    _write(buf, _MINE, strategy.mine_trash_priority)
+    for name, n in strategy.buy_targets.items():
+        if name in CARD_ID:
+            buf[_TARGETS + CARD_ID[name]] = n
+    return (ctypes.c_int * STRATEGY_SIZE)(*buf)
 
 
-# ── Kingdom serialization ──
-
-def _kingdom_to_ids(kingdom: list[str] | None) -> tuple[ctypes.Array, int]:
-    """Convert kingdom card names to a ctypes int array."""
-    if kingdom is None:
-        kingdom = KINGDOM_CARDS
-    ids = [CARD_ID[name] for name in kingdom]
-    arr = (ctypes.c_int * len(ids))(*ids)
-    return arr, len(ids)
+def _kingdom(kingdom: list[str] | None) -> tuple[ctypes.Array, int]:
+    ids = [CARD_ID[c] for c in (kingdom if kingdom is not None else KINGDOM_CARDS[:10])]
+    return (ctypes.c_int * len(ids))(*ids), len(ids)
 
 
-# ── Drop-in replacement for evaluate_vs_opponent ──
+def play_one_c(s0: Strategy, s1: Strategy, seed: int, kingdom: list[str] | None) -> dict:
+    """One game, s0 in seat 0 (for parity tests)."""
+    out = (ctypes.c_int * 7)()
+    trace = ctypes.c_uint64()
+    k, kn = _kingdom(kingdom)
+    _lib.ga_play_one(strategy_to_ints(s0), strategy_to_ints(s1), seed, k, kn, out, ctypes.byref(trace))
+    return {"scores": [out[0], out[1]], "turns": out[2], "actions": [out[3], out[4]],
+            "winners": [i for i in range(2) if out[5] >> i & 1], "capped": bool(out[6] & 1),
+            "error": bool(out[6] & 2), "trace": trace.value}
+
 
 def evaluate_vs_opponent_c(strategy: Strategy, seed_list: list[int],
                            kingdom: list[str] | None = None,
                            opponent: Strategy | None = None) -> dict:
-    """Play 2-player games against an opponent using the C engine.
-
-    Same interface as fitness.evaluate_vs_opponent but ~50-100x faster.
-    Does not return avg_final_deck (returns None for that field).
-    """
+    """Each seed played from both seats. Same result keys as fitness.evaluate_vs_opponent."""
     from core.strategy import big_money_strategy
     opp = opponent if opponent is not None else big_money_strategy()
-
-    strat1 = strategy_to_ints(strategy)
-    strat2 = strategy_to_ints(opp)
-    kingdom_arr, kingdom_n = _kingdom_to_ids(kingdom)
-
-    num_seeds = len(seed_list)
-    seeds_arr = (ctypes.c_uint64 * num_seeds)(*seed_list)
-
-    # Output arrays: 2 results per seed (seat swap)
-    n_results = num_seeds * 2
-    out_vp1 = (ctypes.c_int * n_results)()
-    out_vp2 = (ctypes.c_int * n_results)()
-    out_turns = (ctypes.c_int * n_results)()
-    out_actions1 = (ctypes.c_int * n_results)()
-
-    _lib.play_games_batch(strat1, strat2, seeds_arr, num_seeds,
-                          kingdom_arr, kingdom_n,
-                          out_vp1, out_vp2, out_turns, out_actions1)
-
-    # Aggregate results
-    wins = 0
-    ties = 0
-    total_turns = 0
-    total_vp_margin = 0
-    total_actions1 = 0
-
-    for i in range(n_results):
-        vp1 = out_vp1[i]
-        vp2 = out_vp2[i]
-        total_turns += out_turns[i]
-        total_vp_margin += vp1 - vp2
-        total_actions1 += out_actions1[i]
-        if vp1 > vp2:
-            wins += 1
-        elif vp1 == vp2:
-            ties += 1
-
-    mean_actions_per_turn = total_actions1 / total_turns if total_turns > 0 else 0.0
-
+    k, kn = _kingdom(kingdom)
+    n = len(seed_list)
+    seeds = (ctypes.c_uint64 * n)(*seed_list)
+    vp1, vp2, turns, actions, result = [(ctypes.c_int * (2 * n))() for _ in range(5)]
+    _lib.ga_play_batch(strategy_to_ints(strategy), strategy_to_ints(opp), seeds, n, k, kn,
+                       vp1, vp2, turns, actions, result)
+    games = 2 * n
+    wins = sum(1 for r in result if r == 1)
+    ties = sum(1 for r in result if r == 0)
+    total_turns = sum(turns)
     return {
-        "win_rate": wins / n_results,
-        "tie_rate": ties / n_results,
-        "loss_rate": (n_results - wins - ties) / n_results,
-        "mean_turns": total_turns / n_results,
-        "mean_vp_margin": total_vp_margin / n_results,
-        "mean_actions_per_turn": mean_actions_per_turn,
+        "win_rate": wins / games,
+        "tie_rate": ties / games,
+        "loss_rate": (games - wins - ties) / games,
+        "mean_turns": total_turns / games,
+        "mean_vp_margin": (sum(vp1) - sum(vp2)) / games,
+        "mean_actions_per_turn": sum(actions) / total_turns if total_turns else 0.0,
         "avg_final_deck": None,
     }

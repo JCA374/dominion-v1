@@ -41,7 +41,7 @@ from policy.keycards import derive, fmt
 from policy.registry import (BENCH_FILE, key_cards, list_models, read_bench, read_manifest,
                              resolve)
 
-BENCH_VERSION = 1
+BENCH_VERSION = 2   # 2: engine with Steam rules (8 Provinces, all 26 cards, tiebreak)
 
 # Steam Dominion's base set (2nd edition): the pool its random kingdoms are drawn from.
 STEAM_BASE_SET = [
@@ -61,14 +61,14 @@ OPPONENTS = {
 
 def steam_kingdoms(n: int, seed: int, must=None) -> list[list[str]]:
     """n random 10-card base-set kingdoms containing every card in `must` (a card or a list),
-    cut down to the cards the engine plays."""
+    (the engine knows all 26 cards)."""
     must = [must] if isinstance(must, str) else sorted(set(must or []))
     rng = random.Random(f"{seed}:{must[0] if len(must) == 1 else must or None}")
     pool = [c for c in STEAM_BASE_SET if c not in must]
     out = []
     for _ in range(n):
         k = rng.sample(pool, 10 - len(must)) + must
-        out.append(sorted(c for c in k if c in KINGDOM_CARDS))
+        out.append(sorted(k))
     return out
 
 

@@ -2,10 +2,10 @@
 import json
 import os
 import sys
+from collections import Counter
 
 import pytest
 
-from core.engine import GameState, play_buy_phase
 from policy import PROTOCOL_VERSION, list_models, load_policy, observation
 from policy.check import check, scenarios
 from policy.registry import MODELS_DIR, default_model, read_manifest
@@ -28,28 +28,51 @@ def test_released_models_conform(name):
     assert check(policy) == []
 
 
-def test_ga_buy_matches_training_engine():
+def test_ga_policy_answers_like_the_agent_in_training():
+    """Mid-game, the protocol answer equals the GA agent's own engine decision."""
+    import core  # noqa: F401
+    from core.agent import GAAgent
+    from dominion_engine import cards as K, game as G, play
+
     policy = load_policy("k1-steam")
-    for req in scenarios(K1, n=40):
-        if req["type"] != "buy":
-            continue
-        obs = req["obs"]
-        supply = {c: 10 for c in ["Copper", "Silver", "Gold", "Estate", "Duchy", "Curse"] + K1}
-        supply["Province"] = obs["provinces_left"]
-        for c in obs["empty_piles"]:
-            supply[c] = 0
-        st = GameState(supply=supply, coins=obs["coins"], buys=obs["buys"], turn=obs["turn"],
-                       deck=[c for c, n in obs["owned"].items() for _ in range(n)])
-        play_buy_phase(st, policy.strategy)
-        assert policy.buy(obs) == st.discard
+    checked = []
+
+    class Checker(GAAgent):
+        def decide(self, g, d):
+            ans = super().decide(g, d)
+            p = g.players[d.player]
+            if d.kind == G.BUY and d.player == g.current:
+                obs = observation(
+                    turn=g.turn_number(d.player), provinces_left=g.provinces_left, kingdom=K1,
+                    empty_piles=[K.NAME[c] for c in range(K.NUM_CARDS) if g.supply[c] == 0],
+                    owned={K.NAME[c]: n for c, n in Counter(p.all_cards()).items()},
+                    hand=[K.NAME[c] for c in p.hand], actions=g.actions, buys=g.buys,
+                    coins=g.coins)
+                got = policy.buy(obs)
+                assert (got[0] if got else None) == (K.NAME[ans] if ans >= 0 else None)
+                checked.append(1)
+            return ans
+
+    for seed in range(30):
+        play(K1, [Checker(policy.strategy), GAAgent(policy.strategy)], seed)
+    assert len(checked) > 300
 
 
 def test_unknown_cards_are_never_bought_and_discarded_first():
     policy = load_policy("k1-steam")
-    obs = observation(kingdom=K1[:9] + ["Bandit"], coins=5, hand=["Bandit", "Copper", "Gold",
-                                                                    "Silver", "Estate"])
-    assert "Bandit" not in policy.buy(obs)
-    assert policy.discard(obs, keep=3)[0] == "Bandit"
+    obs = observation(kingdom=K1[:9] + ["Torturer"], coins=5, hand=["Torturer", "Copper", "Gold",
+                                                                      "Silver", "Estate"])
+    assert "Torturer" not in policy.buy(obs)
+    assert policy.discard(obs, keep=3)[0] == "Torturer"
+
+
+def test_cards_without_protocol_requests_are_never_bought():
+    from core.strategy import big_money_strategy
+    from policy.ga_policy import GAPolicy
+    s = big_money_strategy()
+    s.early_buy_priority = ["Cellar", "Remodel", "Silver", "PASS"]
+    policy = GAPolicy({"name": "t", "kingdom": ["Cellar", "Remodel"]}, s)
+    assert policy.buy(observation(kingdom=["Cellar", "Remodel"], coins=4)) == ["Silver"]
 
 
 def test_handle_reports_errors_instead_of_raising():

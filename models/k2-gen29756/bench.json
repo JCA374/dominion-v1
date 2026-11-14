@@ -1,5 +1,5 @@
 {
- "bench_version": 1,
+ "bench_version": 2,
  "model": "k2-gen29756",
  "date": "2026-11-14",
  "config": {
@@ -11,13 +11,13 @@
   "Laboratory": 2
  },
  "score": 0.0,
- "random_score": 6.25e-05,
+ "random_score": 0.0,
  "opponents": {
   "Big Money": {
    "steam": {
-    "score": 0.0001875,
+    "score": 0.0,
     "win": 0.0,
-    "tie": 0.000375,
+    "tie": 0.0,
     "games": 8000,
     "kingdoms": 200
    },

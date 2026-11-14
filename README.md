@@ -1,13 +1,15 @@
 # dominion-v1
 
-A genetic algorithm that evolves Dominion strategies on a simplified engine
-(Python for play and the rules, C for fast training). The evolved models are
+A genetic algorithm that evolves Dominion strategies. The game is the shared
+[dominion-engine](https://github.com/JCA374/dominion-engine) (Steam Dominion's rules, all 26
+base-set cards; git submodule `engine/`); this repo adds the genome as an agent in Python and C.
+Clone with `git clone --recursive` (or `git submodule update --init`). The evolved models are
 played on the real Steam game by
 [dominion-steam-autopilot](https://github.com/JCA374/dominion-steam-autopilot),
 which has this repo as a submodule.
 
 ```bash
-make                         # build the C engine (c/ -> dominion.so)
+make                         # build dominion.so (engine/c + c/ga_agent.c; also auto-built)
 python train.py              # train; writes best_model/ (KINGDOM in ga/main.py)
 python play.py               # play against a model in the terminal (gui.py: pygame)
 python trace.py              # watch two models play

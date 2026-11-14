@@ -1,5 +1,5 @@
 {
- "bench_version": 1,
+ "bench_version": 2,
  "model": "mixed-gen10324",
  "date": "2026-11-14",
  "config": {
@@ -11,36 +11,36 @@
   "Gardens": 10,
   "Council Room": 1
  },
- "score": 0.0,
- "random_score": 0.002416666666666667,
+ "score": 0.004166666666666667,
+ "random_score": 0.030041666666666664,
  "opponents": {
   "Big Money": {
    "steam": {
-    "score": 0.0,
-    "win": 0.0,
-    "tie": 0.0,
+    "score": 0.075625,
+    "win": 0.066625,
+    "tie": 0.018,
     "games": 8000,
     "kingdoms": 200
    },
    "training": {
-    "score": 0.0,
+    "score": 0.0125,
     "win": 0.0,
-    "tie": 0.0,
+    "tie": 0.025,
     "games": 400,
     "kingdoms": 1
    },
    "eligible": {
-    "score": 0.0,
+    "score": 0.0125,
     "win": 0.0,
-    "tie": 0.0,
+    "tie": 0.025,
     "games": 8000,
     "kingdoms": 200
    }
   },
   "Smithy-BM": {
    "steam": {
-    "score": 0.00725,
-    "win": 0.00725,
+    "score": 0.0145,
+    "win": 0.0145,
     "tie": 0.0,
     "games": 8000,
     "kingdoms": 200

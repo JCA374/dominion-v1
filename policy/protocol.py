@@ -28,6 +28,12 @@ PROTOCOL_VERSION = 1
 
 REQUESTS = ("info", "action", "buy", "trash", "discard", "throne_room")
 
+# Cards whose own choices no request above can express yet (the engine knows them). A model is
+# never told to buy one, so a player like the Steam autopilot never meets their prompts. To
+# allow one: add its request here and in docs/PROTOCOL.md, and teach the players its prompt.
+NO_REQUEST_YET = ("Artisan", "Cellar", "Harbinger", "Library", "Poacher", "Remodel", "Sentry",
+                  "Vassal", "Workshop")
+
 OBS_DEFAULTS = {
     "turn": 1,
     "provinces_left": 8,

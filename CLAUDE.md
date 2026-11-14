@@ -2,18 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-This is `JCA374/dominion-v1`: a genetic algorithm that evolves Dominion strategies on a simplified engine. Its released
-models are played on the real Steam game by `JCA374/dominion-steam-autopilot` (checked out at `../dominion-auto`),
-which has this repo as a submodule and talks to it only through `policy/`. Future work here: improve the GA, add more
-models (including non-GA ones speaking the same protocol, see `docs/PROTOCOL.md`).
+This is `JCA374/dominion-v1` (folder `trainers/ga-v1`): a genetic algorithm that evolves Dominion strategies. The
+game is the shared engine `JCA374/dominion-engine`, a git submodule at `engine/` (Steam rules, all 26 base-set cards;
+its own checkout is `../../engine`). Released models are played on the real Steam game by
+`JCA374/dominion-steam-autopilot` (`../../autopilot`), which has this repo as a submodule and talks to it only
+through `policy/`. Other kinds of models get their own trainer folder next to this one (`trainers/<kind>-v<N>`) on
+the same engine and the same protocol (`docs/PROTOCOL.md`).
 
-After releasing a model and pushing, the autopilot picks it up with `git -C dominion-v1 pull origin main` plus a
-submodule bump commit in `../dominion-auto`.
+After releasing a model and pushing, the autopilot picks it up with
+`git -C dominion-v1 pull origin main && git -C dominion-v1 submodule update --init` plus a submodule bump commit in
+`../../autopilot`. After an engine change: `git -C engine pull origin main`, rerun the tests, `policy.bench --store`,
+commit the bump.
 
 ## Commands
 
 ```bash
-make                          # build c/ -> dominion.so (auto-built on first run if missing; falls back to Python engine)
+git submodule update --init   # fetch engine/ (or clone with --recursive)
+make                          # build dominion.so = engine/c + c/ga_agent.c (auto-built when missing or stale)
 python train.py [--continue]  # train; writes best_model/. GA config + KINGDOM presets at the top of ga/main.py
 python play.py | gui.py       # play against best_model in terminal / pygame
 python trace.py [--vs self|prev|hall|gens|N] [--seed N] [--games N]   # AI vs AI trace or win-rate tables
@@ -30,9 +35,10 @@ python -m policy.select CARD ... | --best-kingdom   # which model the selector p
 
 ## Architecture
 
-- Two engines with the same rules: `core/engine.py` (Python, used by play modes and `policy`) and `c/dominion.c`
-  (training, via ctypes in `ga/c_bridge.py`). **A rules change must be made in both**, or trained strategies stop
-  playing the way they were evaluated.
+- The rules live in `engine/` only (Python reference + C twin, see its CLAUDE.md); never re-implement them here.
+  The genome plays through an agent: `core/agent.py` (Python: play modes, `policy`) and `c/ga_agent.c` (C:
+  training, built with the engine into `dominion.so` by `ga/c_bridge.py`). **The two agents must decide
+  identically**: `tests/test_agent_parity.py` compares whole games decision by decision.
 - Genome (`Strategy` in `core/strategy.py`): 3 phases (early/mid/late, `get_current_phase`) with evolvable
   transition genes; per phase a buy priority (with PASS) and Chapel trash order; shared non-terminal/terminal action
   order, terminal slack and buy targets. HOWTO.md still describes an older 4-phase genome.
@@ -40,11 +46,14 @@ python -m policy.select CARD ... | --best-kingdom   # which model the selector p
   oldest evicted), saved under `best_model/hall/`. `best_model/` changes on every run — anything played elsewhere
   must be released into `models/` first.
 - Training's hall-of-fame win rate does not predict Steam results (models overfit their training kingdom);
-  judge a model with `policy.bench`. `tests/test_smoke.py::test_c_engine_matches_python_with_attacks` guards
-  engine parity for lopsided matchups — a Big Money mirror is ~50% in any engine and proves nothing.
-- Known gaps vs Steam: both engines use 12 Provinces/Duchies in a 2-player game (Steam: 8), and know 15 of the
-  26 base-set kingdom cards. `k2-gen29756` and `mixed-gen10324` are older genome formats the current loader
-  misreads (they score ~0% in `policy.bench`); don't play them (they are `"retired"`, so never auto-selected).
+  judge a model with `policy.bench`. Wins use Steam's tiebreak (equal VP: fewer turns wins).
+- Models released before 2026-11-14 were trained on the first engine (12 Provinces, 15 cards, turn-40 cap; see
+  `engine/RULES.md`); their `bench.json` is re-measured on Steam rules (bench_version 2). `k2-gen29756` and
+  `mixed-gen10324` are older genome formats the current loader misreads (~0% in `policy.bench`); they are
+  `"retired"`, so never auto-selected.
+- The 11 cards the first engine lacked are trainable, but the protocol has no requests for the choices of 9 of
+  them (`policy.protocol.NO_REQUEST_YET`), so policies never buy those; opening one up needs a protocol request
+  and the autopilot learning its Steam prompt.
 - Models are plug-in folders (`models/` + `DOMINION_MODELS` folders). The selector (`policy/selector.py`) picks
   by exact training kingdom, then key cards dealt + stored bench score; never Big Money. After releasing a model run
   `policy.bench --store` so it has a score.

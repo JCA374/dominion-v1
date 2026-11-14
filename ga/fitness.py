@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import os
 import random
-import statistics
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from typing import TYPE_CHECKING
 
-from core.engine import play_game, play_game_2p
+from core.engine import play_game_2p
 from core.strategy import big_money_strategy
 
 try:
@@ -27,27 +26,12 @@ def make_seed_list(num_games: int, master_rng: random.Random) -> list[int]:
     return [master_rng.randint(0, 2**31) for _ in range(num_games)]
 
 
-def evaluate(strategy: Strategy, seed_list: list[int],
-             kingdom: list[str] | None = None) -> dict:
-    """Run len(seed_list) games, return fitness stats."""
-    results = [play_game(strategy, s, kingdom) for s in seed_list]
-    vps = [r["vp"] for r in results]
-    turns = [r["turns"] for r in results]
-
-    return {
-        "mean_vp": statistics.mean(vps),
-        "std_vp": statistics.stdev(vps) if len(vps) > 1 else 0.0,
-        "mean_turns": statistics.mean(turns),
-        "min_vp": min(vps),
-        "max_vp": max(vps),
-    }
-
-
 def evaluate_vs_opponent(strategy: Strategy, seed_list: list[int],
                          kingdom: list[str] | None = None,
                          opponent: Strategy | None = None,
                          need_deck: bool = False) -> dict:
-    """Play 2-player games against an opponent. Return win rate.
+    """Play 2-player games against an opponent. Return win rate (Steam's tiebreak: equal VP is
+    won by the player with fewer turns; a tie is a shared win).
 
     If opponent is None, defaults to Big Money.
     Each seed is played twice (strategy as P1 and as P2) to cancel
@@ -71,9 +55,9 @@ def evaluate_vs_opponent(strategy: Strategy, seed_list: list[int],
         total_turns += r1["turns"]
         total_vp_margin += r1["vp1"] - r1["vp2"]
         total_actions += r1["actions1"]
-        if r1["vp1"] > r1["vp2"]:
+        if r1["winners"] == [0]:
             wins += 1
-        elif r1["vp1"] == r1["vp2"]:
+        elif len(r1["winners"]) == 2:
             ties += 1
         for card in r1["deck1"]:
             deck_counts[card] = deck_counts.get(card, 0) + 1
@@ -83,9 +67,9 @@ def evaluate_vs_opponent(strategy: Strategy, seed_list: list[int],
         total_turns += r2["turns"]
         total_vp_margin += r2["vp2"] - r2["vp1"]
         total_actions += r2["actions2"]
-        if r2["vp2"] > r2["vp1"]:
+        if r2["winners"] == [1]:
             wins += 1
-        elif r2["vp2"] == r2["vp1"]:
+        elif len(r2["winners"]) == 2:
             ties += 1
         for card in r2["deck2"]:
             deck_counts[card] = deck_counts.get(card, 0) + 1

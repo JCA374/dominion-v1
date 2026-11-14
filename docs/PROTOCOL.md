@@ -60,6 +60,12 @@ the player should then fall back or wait). Card names are the English names on
 the cards. A model must cope with cards it doesn't know (Steam kingdoms vary):
 it never buys them, and it discards them first.
 
+The engine (`engine/`, Steam rules) knows all 26 base-set cards, but the requests above can
+only express the choices of some of them. A model is never told to buy a card in
+`policy.protocol.NO_REQUEST_YET` (Artisan, Cellar, Harbinger, Library, Poacher, Remodel,
+Sentry, Vassal, Workshop), so a player never meets their prompts. Opening one up means a new
+request here, a protocol version bump, and the player learning that card's prompt.
+
 `policy.check_answer(request, answer)` checks an answer is legal: the cards are in
 hand, the buys are affordable, nothing comes from an empty pile.
 
@@ -101,7 +107,7 @@ and register the kind in `policy/registry.py:load_policy`.
 
 A model is a folder with a `model.json`. Folders are found in `models/` and in every folder
 listed in the `DOMINION_MODELS` environment variable (`os.pathsep`-separated), so a player
-keeps its own models folder (the autopilot's is `dominion-auto/models/`) and adding a model
+keeps its own models folder (the autopilot's is `autopilot/models/`) and adding a model
 is adding a folder: no code, menu or UI changes. `list_models()` returns them all; a name in
 `models/` wins over the same name elsewhere.
 

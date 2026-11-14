@@ -1,5 +1,5 @@
 {
- "bench_version": 1,
+ "bench_version": 2,
  "model": "k2f-gen13665",
  "date": "2026-11-14",
  "config": {
@@ -12,27 +12,27 @@
   "Witch": 2,
   "Militia": 1
  },
- "score": 0.7067708333333332,
- "random_score": 0.5045000000000001,
+ "score": 0.38906250000000003,
+ "random_score": 0.2568125,
  "opponents": {
   "Big Money": {
    "steam": {
-    "score": 0.7171875,
-    "win": 0.696375,
-    "tie": 0.041625,
+    "score": 0.3576875,
+    "win": 0.351625,
+    "tie": 0.012125,
     "games": 8000,
     "kingdoms": 200
    },
    "training": {
-    "score": 0.975,
-    "win": 0.975,
+    "score": 0.525,
+    "win": 0.525,
     "tie": 0.0,
     "games": 400,
     "kingdoms": 1
    },
    "eligible": {
-    "score": 0.9385625,
-    "win": 0.9295,
+    "score": 0.5540625,
+    "win": 0.545,
     "tie": 0.018125,
     "games": 8000,
     "kingdoms": 200
@@ -40,46 +40,46 @@
   },
   "Smithy-BM": {
    "steam": {
-    "score": 0.5670625,
-    "win": 0.546625,
-    "tie": 0.040875,
+    "score": 0.2456875,
+    "win": 0.223875,
+    "tie": 0.043625,
     "games": 8000,
     "kingdoms": 200
    },
    "training": {
-    "score": 0.8625,
-    "win": 0.85,
-    "tie": 0.025,
+    "score": 0.325,
+    "win": 0.325,
+    "tie": 0.0,
     "games": 400,
     "kingdoms": 1
    },
    "eligible": {
-    "score": 0.87475,
-    "win": 0.86225,
-    "tie": 0.025,
+    "score": 0.355875,
+    "win": 0.355875,
+    "tie": 0.0,
     "games": 8000,
     "kingdoms": 200
    }
   },
   "Witch-BM": {
    "steam": {
-    "score": 0.22925,
-    "win": 0.197625,
-    "tie": 0.06325,
+    "score": 0.1670625,
+    "win": 0.15625,
+    "tie": 0.021625,
     "games": 8000,
     "kingdoms": 200
    },
    "training": {
-    "score": 0.325,
-    "win": 0.275,
-    "tie": 0.1,
+    "score": 0.2625,
+    "win": 0.25,
+    "tie": 0.025,
     "games": 400,
     "kingdoms": 1
    },
    "eligible": {
-    "score": 0.307,
-    "win": 0.257,
-    "tie": 0.1,
+    "score": 0.25725,
+    "win": 0.24475,
+    "tie": 0.025,
     "games": 8000,
     "kingdoms": 200
    }
