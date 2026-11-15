@@ -64,6 +64,12 @@ python -m policy.portfolio choose NAME CARD ...  # which member the portfolio pl
   policy plays every member on the dealt kingdom (C engine, ~0.5 s, blocked cards masked) and the best one plays.
   Benchmarks and plans give every kingdom its own game seeds (`policy.bench.kingdom_seeds`, bench_version 3):
   shared seeds replay identical games wherever neither player buys the kingdom cards.
+- Rollout search (2026-11-15): `c/ga_agent.c` search_decide plays each buy option out N times from a copy of the
+  game (engine `de_resume_buy`/`de_hide`), same hidden shuffle per rollout, overrules the genome only past a margin;
+  `ga.c_bridge.search_vs` (games) and `search_buy` (from a player's view). A portfolio with a manifest `"search"`
+  (portfolio-v2s) uses it for buys when the observation has `opponent_owned`. Needs the opponent's cards: with a
+  mirror-imagined opponent the gain vanishes. Measured dead ends: endgame score rule, money gate, bigger pools,
+  4x generalist budget, league round 3 (see the site's training log).
 - Models are plug-in folders (`models/` + `DOMINION_MODELS` folders). The selector (`policy/selector.py`) picks
   by exact training kingdom, then key cards dealt + stored bench score; never Big Money. After releasing a model run
   `policy.bench --store` so it has a score.
