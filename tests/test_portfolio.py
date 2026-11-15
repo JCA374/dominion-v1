@@ -60,3 +60,9 @@ def test_choice_is_deterministic_and_plays_the_chosen_member(portfolio):
     p = PortfolioPolicy(portfolio)
     assert p.phase(observation(kingdom=k)).startswith(p.chosen["member"] + ":")
     assert not check(p, k)
+
+
+def test_trial_hall_members_join_the_trial_opponents(portfolio):
+    k = ["Cellar", "Chapel", "Moat", "Village", "Smithy", "Militia", "Market", "Witch", "Mine", "Artisan"]
+    r = choose({**portfolio, "trial_hall": ["engine"]}, k, n_seeds=6)
+    assert r["bots"] == ["Big Money", "Smithy-BM", "Witch-BM", "member:engine"]

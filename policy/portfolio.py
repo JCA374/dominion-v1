@@ -50,6 +50,9 @@ def choose(manifest: dict, kingdom: list[str], banned=NO_REQUEST_YET, n_seeds: i
     rng = random.Random(f"{seed}:{','.join(k)}")
     seeds = [rng.getrandbits(32) for _ in range(n_seeds)]
     bots = [(n, b) for n, (b, card) in OPPONENTS.items() if card is None or card in k]
+    # manifest "trial_hall": members that also serve as trial opponents (stronger than the bots)
+    hall = [(f"member:{h}", mask(strategies[h], banned)) for h in manifest.get("trial_hall", [])
+            if h in strategies]
     scores = {}
     for name, s in strategies.items():
         s = mask(s, banned)
@@ -57,9 +60,12 @@ def choose(manifest: dict, kingdom: list[str], banned=NO_REQUEST_YET, n_seeds: i
         for _, bot in bots:
             r = evaluate_vs_opponent_c(s, seeds, k, bot(k))
             tot += r["win_rate"] + r["tie_rate"] / 2
-        scores[name] = tot / len(bots)
+        for _, opp in hall:
+            r = evaluate_vs_opponent_c(s, seeds, k, opp)
+            tot += r["win_rate"] + r["tie_rate"] / 2
+        scores[name] = tot / (len(bots) + len(hall))
     best = max(scores, key=lambda n: scores[n])     # dicts keep order: first wins a tie
-    return {"member": best, "scores": scores, "bots": [n for n, _ in bots]}
+    return {"member": best, "scores": scores, "bots": [n for n, _ in bots] + [n for n, _ in hall]}
 
 
 class PortfolioPolicy(Policy):
