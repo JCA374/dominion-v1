@@ -396,3 +396,41 @@ void ga_search_batch(const int *s, const int *opp_model, const int *opp, const u
         }
     }
 }
+
+/* Search from what a player sees (policy/search.py): my hand and played cards, my draw pile
+ * (order unknown: shuffled) and discard pile, the opponent's cards (as tracked), the supply.
+ * Seat 0 moves first. Returns the card to buy now, or -1. stats: [searched, changed]. */
+int ga_search_buy(const int *s_me, const int *s_opp, const int *supply, int me,
+                  const int *hand, int hn, const int *play, int pn, const int *deck, int dn,
+                  const int *discard, int xn,
+                  const int *opp, int on, const int *opp_discard, int odn,
+                  int my_turns, int opp_turns, int coins, int buys,
+                  int rollouts, int top, int margin, uint64_t seed, int *stats) {
+    static de_game g;
+    memset(&g, 0, sizeof(g));
+    g.nplayers = 2;
+    memcpy(g.supply, supply, sizeof(g.supply));
+    de_player *p = &g.p[me], *o = &g.p[1 - me];
+    memcpy(p->hand, hand, (size_t)hn * sizeof(int)); p->hand_n = hn;
+    memcpy(p->play, play, (size_t)pn * sizeof(int)); p->play_n = pn;
+    memcpy(p->deck, deck, (size_t)dn * sizeof(int)); p->deck_n = dn;
+    memcpy(p->discard, discard, (size_t)xn * sizeof(int)); p->discard_n = xn;
+    int oh = on < 5 ? on : 5;                         /* their hand: 5 of their cards (de_hide shuffles) */
+    memcpy(o->hand, opp, (size_t)oh * sizeof(int)); o->hand_n = oh;
+    memcpy(o->deck, opp + oh, (size_t)(on - oh) * sizeof(int)); o->deck_n = on - oh;
+    memcpy(o->discard, opp_discard, (size_t)odn * sizeof(int)); o->discard_n = odn;
+    p->turns = my_turns; o->turns = opp_turns;
+    p->rng = o->rng = 1;
+    g.current = me;
+    g.coins = coins; g.buys = buys;
+    g.trace = 0xcbf29ce484222325ULL;
+    int opts[DE_NUM_CARDS], n = 0;
+    for (int c = 0; c < DE_NUM_CARDS; c++)
+        if (g.supply[c] > 0 && DE_CARDS[c].cost <= coins) opts[n++] = c;
+    if (!n || buys < 1) return -1;
+    ga_search srch = {{s_me, 0}, s_opp, rollouts, top, margin, seed | 1, 0, 0, 0};
+    int choice = search_decide(&srch, &g, DE_BUY, me, -1, opts, n, 1);
+    stats[0] += srch.searched;
+    stats[1] += srch.changed;
+    return choice;
+}

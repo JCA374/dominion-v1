@@ -1,0 +1,321 @@
+{
+  "protocol": 2,
+  "name": "portfolio-v2s",
+  "kind": "ga-portfolio",
+  "kingdom": [
+    "Artisan",
+    "Bandit",
+    "Bureaucrat",
+    "Cellar",
+    "Chapel",
+    "Council Room",
+    "Festival",
+    "Gardens",
+    "Harbinger",
+    "Laboratory",
+    "Library",
+    "Market",
+    "Merchant",
+    "Militia",
+    "Mine",
+    "Moat",
+    "Moneylender",
+    "Poacher",
+    "Remodel",
+    "Sentry",
+    "Smithy",
+    "Throne Room",
+    "Vassal",
+    "Village",
+    "Witch",
+    "Workshop"
+  ],
+  "key_cards": {},
+  "members": [
+    {
+      "name": "v2-artisan",
+      "file": "members/v2-artisan.json",
+      "must": [
+        "Artisan"
+      ],
+      "banned": [],
+      "val_score": 0.6149,
+      "generations": 500
+    },
+    {
+      "name": "v2-bandit",
+      "file": "members/v2-bandit.json",
+      "must": [
+        "Bandit"
+      ],
+      "banned": [],
+      "val_score": 0.644,
+      "generations": 500
+    },
+    {
+      "name": "v2-bureaucrat",
+      "file": "members/v2-bureaucrat.json",
+      "must": [
+        "Bureaucrat"
+      ],
+      "banned": [],
+      "val_score": 0.566,
+      "generations": 500
+    },
+    {
+      "name": "v2-cellar",
+      "file": "members/v2-cellar.json",
+      "must": [
+        "Cellar"
+      ],
+      "banned": [],
+      "val_score": 0.6068,
+      "generations": 500
+    },
+    {
+      "name": "v2-chapel",
+      "file": "members/v2-chapel.json",
+      "must": [
+        "Chapel"
+      ],
+      "banned": [],
+      "val_score": 0.6248,
+      "generations": 500
+    },
+    {
+      "name": "v2-council-room",
+      "file": "members/v2-council-room.json",
+      "must": [
+        "Council Room"
+      ],
+      "banned": [],
+      "val_score": 0.6127,
+      "generations": 500
+    },
+    {
+      "name": "v2-festival",
+      "file": "members/v2-festival.json",
+      "must": [
+        "Festival"
+      ],
+      "banned": [],
+      "val_score": 0.6262,
+      "generations": 500
+    },
+    {
+      "name": "v2-gardens",
+      "file": "members/v2-gardens.json",
+      "must": [
+        "Gardens",
+        "Workshop"
+      ],
+      "banned": [],
+      "val_score": 0.8531,
+      "generations": 500
+    },
+    {
+      "name": "v2-generalist",
+      "file": "members/v2-generalist.json",
+      "must": [],
+      "banned": [],
+      "val_score": 0.6394,
+      "generations": 500
+    },
+    {
+      "name": "v2-harbinger",
+      "file": "members/v2-harbinger.json",
+      "must": [
+        "Harbinger"
+      ],
+      "banned": [],
+      "val_score": 0.5921,
+      "generations": 500
+    },
+    {
+      "name": "v2-laboratory",
+      "file": "members/v2-laboratory.json",
+      "must": [
+        "Laboratory"
+      ],
+      "banned": [],
+      "val_score": 0.6169,
+      "generations": 500
+    },
+    {
+      "name": "v2-library",
+      "file": "members/v2-library.json",
+      "must": [
+        "Library"
+      ],
+      "banned": [],
+      "val_score": 0.5835,
+      "generations": 500
+    },
+    {
+      "name": "v2-market",
+      "file": "members/v2-market.json",
+      "must": [
+        "Market"
+      ],
+      "banned": [],
+      "val_score": 0.6494,
+      "generations": 500
+    },
+    {
+      "name": "v2-merchant",
+      "file": "members/v2-merchant.json",
+      "must": [
+        "Merchant"
+      ],
+      "banned": [],
+      "val_score": 0.6678,
+      "generations": 500
+    },
+    {
+      "name": "v2-militia",
+      "file": "members/v2-militia.json",
+      "must": [
+        "Militia"
+      ],
+      "banned": [],
+      "val_score": 0.666,
+      "generations": 500
+    },
+    {
+      "name": "v2-mine",
+      "file": "members/v2-mine.json",
+      "must": [
+        "Mine"
+      ],
+      "banned": [],
+      "val_score": 0.649,
+      "generations": 500
+    },
+    {
+      "name": "v2-moneylender",
+      "file": "members/v2-moneylender.json",
+      "must": [
+        "Moneylender"
+      ],
+      "banned": [],
+      "val_score": 0.5251,
+      "generations": 500
+    },
+    {
+      "name": "v2-poacher",
+      "file": "members/v2-poacher.json",
+      "must": [
+        "Poacher"
+      ],
+      "banned": [],
+      "val_score": 0.6373,
+      "generations": 500
+    },
+    {
+      "name": "v2-remodel",
+      "file": "members/v2-remodel.json",
+      "must": [
+        "Remodel"
+      ],
+      "banned": [],
+      "val_score": 0.6343,
+      "generations": 500
+    },
+    {
+      "name": "v2-sentry",
+      "file": "members/v2-sentry.json",
+      "must": [
+        "Sentry"
+      ],
+      "banned": [],
+      "val_score": 0.6196,
+      "generations": 500
+    },
+    {
+      "name": "v2-smithy",
+      "file": "members/v2-smithy.json",
+      "must": [
+        "Smithy"
+      ],
+      "banned": [],
+      "val_score": 0.6376,
+      "generations": 500
+    },
+    {
+      "name": "v2-throne-room",
+      "file": "members/v2-throne-room.json",
+      "must": [
+        "Throne Room"
+      ],
+      "banned": [],
+      "val_score": 0.6186,
+      "generations": 500
+    },
+    {
+      "name": "v2-vassal",
+      "file": "members/v2-vassal.json",
+      "must": [
+        "Vassal"
+      ],
+      "banned": [],
+      "val_score": 0.5969,
+      "generations": 500
+    },
+    {
+      "name": "v2-village-smithy",
+      "file": "members/v2-village-smithy.json",
+      "must": [
+        "Village",
+        "Smithy"
+      ],
+      "banned": [],
+      "val_score": 0.6024,
+      "generations": 500
+    },
+    {
+      "name": "v2-witch",
+      "file": "members/v2-witch.json",
+      "must": [
+        "Witch"
+      ],
+      "banned": [],
+      "val_score": 0.7235,
+      "generations": 500
+    },
+    {
+      "name": "v2-workshop",
+      "file": "members/v2-workshop.json",
+      "must": [
+        "Workshop"
+      ],
+      "banned": [],
+      "val_score": 0.6149,
+      "generations": 500
+    },
+    {
+      "name": "k4-20260614",
+      "file": "members/k4-20260614.json",
+      "must": [
+        "Market",
+        "Merchant",
+        "Witch"
+      ],
+      "banned": [],
+      "released_model": "k4-20260614"
+    }
+  ],
+  "created": "2026-11-15",
+  "source": "ga/specialist.py runs: v2-artisan, v2-bandit, v2-bureaucrat, v2-cellar, v2-chapel, v2-council-room, v2-festival, v2-gardens, v2-generalist, v2-harbinger, v2-laboratory, v2-library, v2-market, v2-merchant, v2-militia, v2-mine, v2-moneylender, v2-poacher, v2-remodel, v2-sentry, v2-smithy, v2-throne-room, v2-vassal, v2-village-smithy, v2-witch, v2-workshop, k4-20260614",
+  "description": "portfolio-v2 plus rollout search for buys (300 rollouts per option, 4 options, 3% margin, opponent modelled as v2-generalist) when the player tracks the opponent's cards (obs opponent_owned); otherwise plays exactly as portfolio-v2.",
+  "trial_hall": [
+    "v2-generalist",
+    "v2-remodel",
+    "v2-witch"
+  ],
+  "search": {
+    "rollouts": 300,
+    "top": 4,
+    "margin": 3,
+    "opponent_model": "v2-generalist"
+  }
+}

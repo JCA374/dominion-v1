@@ -130,3 +130,29 @@ def search_vs(strategy: Strategy, opponent: Strategy, seed_list: list[int],
     ties = sum(1 for r in result if r == 0)
     return {"score": (wins + ties / 2) / (2 * n), "games": 2 * n,
             "searched": stats[0], "changed": stats[1]}
+
+
+_lib.ga_search_buy.restype = ctypes.c_int
+_lib.ga_search_buy.argtypes = [_I, _I, _I, ctypes.c_int, _I, ctypes.c_int, _I, ctypes.c_int, _I,
+                               ctypes.c_int, _I, ctypes.c_int, _I, ctypes.c_int, _I, ctypes.c_int,
+                               ctypes.c_int, ctypes.c_int,
+                               ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                               ctypes.c_uint64, _I]
+
+
+def search_buy(strategy: Strategy, opp_model: Strategy, supply: list[int], me: int,
+               hand: list[int], play: list[int], deck: list[int], discard: list[int], opp_cards: list[int],
+               my_turns: int, opp_turns: int, coins: int, buys: int, opp_discard: list[int] = (),
+               rollouts: int = 100,
+               top: int = 3, margin: int = 5, seed: int = 1) -> tuple[int, dict]:
+    """One buy chosen by rollout search from a player's view (card ids; deck = my draw pile, order
+    unknown; discard = my discard pile; opp_cards = the opponent's cards as tracked). -1 = buy nothing."""
+    arr = lambda xs: (ctypes.c_int * max(1, len(xs)))(*xs)
+    stats = (ctypes.c_int * 2)()
+    c = _lib.ga_search_buy(strategy_to_ints(strategy), strategy_to_ints(opp_model), arr(supply), me,
+                           arr(hand), len(hand), arr(play), len(play), arr(deck), len(deck),
+                           arr(discard), len(discard),
+                           arr(opp_cards), len(opp_cards), arr(list(opp_discard)), len(opp_discard),
+                           my_turns, opp_turns, coins, buys,
+                           rollouts, top, margin, seed & ((1 << 64) - 1), stats)
+    return c, {"searched": stats[0], "changed": stats[1]}

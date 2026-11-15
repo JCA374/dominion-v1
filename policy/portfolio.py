@@ -94,7 +94,42 @@ class PortfolioPolicy(Policy):
         return self.member(obs).play_action(obs)
 
     def buy(self, obs):
-        return self.member(obs).buy(obs)
+        cfg = self.manifest.get("search")
+        if not cfg or obs.get("opponent_owned") is None:
+            return self.member(obs).buy(obs)
+        return self.search_buys(obs, cfg)
+
+    def search_buys(self, obs, cfg) -> list[str]:
+        """Rollout search (c/ga_agent.c ga_search_buy) for every buy of this turn: the chosen member
+        against the opponent's tracked cards, modelled as cfg["opponent_model"]."""
+        from dominion_engine import cards as K
+        from dominion_engine import rules
+        from ga.c_bridge import search_buy
+        member = self.member(obs)
+        model = self.strategies.get(cfg.get("opponent_model"), member.strategy)
+        supply = list(rules.supply([K.ID[c] for c in obs["kingdom"] if c in K.ID], 2))
+        for c in obs["empty_piles"]:
+            if c in K.ID:
+                supply[K.ID[c]] = 0
+        supply[K.PROVINCE] = obs["provinces_left"]
+        mine = [K.ID[c] for c, n in obs["owned"].items() if c in K.ID for _ in range(n)]
+        theirs = [K.ID[c] for c, n in obs["opponent_owned"].items() if c in K.ID for _ in range(n)]
+        me = 0 if obs.get("first", True) else 1
+        turns = obs["turn"] - 1
+        coins, buys, out = obs["coins"], obs["buys"], []
+        seed = hash((obs["turn"], tuple(sorted(obs["owned"].items())), coins)) & ((1 << 63) - 1)
+        while buys > 0:
+            c, _ = search_buy(member.strategy, model, supply, me, [], [], mine, [], theirs,
+                              turns, turns + me, coins, buys, rollouts=cfg.get("rollouts", 300),
+                              top=cfg.get("top", 4), margin=cfg.get("margin", 3), seed=seed + len(out))
+            if c < 0:
+                break
+            out.append(K.NAME[c])
+            mine.append(c)
+            supply[c] -= 1
+            coins -= K.CARDS[c].cost
+            buys -= 1
+        return out
 
     def trash(self, obs):
         return self.member(obs).trash(obs)

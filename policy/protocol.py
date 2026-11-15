@@ -12,6 +12,9 @@ Observation (sent with every request):
     owned           {str:int}  the player's whole deck (all zones), by card name
     hand            [str]      cards in hand right now
     actions, buys, coins  int  counters for the current turn
+    opponent_owned  {str:int}|null  the opponent's cards as far as the player has seen them gained
+                               (starting deck included); lets a searching model simulate the game
+    first           bool       the player moved first (seat 0)
 
 Requests and answers ({"type": ..., "obs": {...}, ...} -> {...}):
     info                       -> {"protocol", "name", "kind", "kingdom", ...}
@@ -60,6 +63,8 @@ OBS_DEFAULTS = {
     "actions": 1,
     "buys": 1,
     "coins": 0,
+    "opponent_owned": None,
+    "first": True,
 }
 
 
@@ -75,6 +80,8 @@ def observation(**fields) -> dict:
     obs["kingdom"] = list(obs["kingdom"])
     obs["empty_piles"] = sorted(obs["empty_piles"])
     obs["owned"] = {k: int(v) for k, v in dict(obs["owned"]).items() if v}
+    if obs["opponent_owned"] is not None:
+        obs["opponent_owned"] = {k: int(v) for k, v in dict(obs["opponent_owned"]).items() if v}
     return obs
 
 
