@@ -104,3 +104,29 @@ def evaluate_vs_opponent_c(strategy: Strategy, seed_list: list[int],
         "mean_actions_per_turn": sum(actions) / total_turns if total_turns else 0.0,
         "avg_final_deck": None,
     }
+
+
+_lib.ga_search_batch.argtypes = [_I, _I, _I, ctypes.POINTER(ctypes.c_uint64), ctypes.c_int, _I,
+                                 ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                 ctypes.c_uint64, ctypes.c_int, _I, _I]
+
+
+def search_vs(strategy: Strategy, opponent: Strategy, seed_list: list[int],
+              kingdom: list[str] | None = None, rollouts: int = 50, top: int = 3,
+              margin: int = 0, opp_model: Strategy | None = None, search_seed: int = 1,
+              imagine: bool = False) -> dict:
+    """Rollout search on top of `strategy` (c/ga_agent.c search_decide) against plain `opponent`,
+    each seed from both seats. opp_model: the search's model of the opponent (default: the
+    opponent itself). imagine: the search doesn't see the opponent's cards and imagines them as a
+    mirror of its own deck (as on Steam). Score = (wins + shared/2) / games."""
+    k, kn = _kingdom(kingdom)
+    n = len(seed_list)
+    seeds = (ctypes.c_uint64 * n)(*seed_list)
+    result, stats = (ctypes.c_int * (2 * n))(), (ctypes.c_int * 2)()
+    _lib.ga_search_batch(strategy_to_ints(strategy), strategy_to_ints(opp_model or opponent),
+                         strategy_to_ints(opponent), seeds, n, k, kn, rollouts, top, margin,
+                         search_seed, int(imagine), result, stats)
+    wins = sum(1 for r in result if r == 1)
+    ties = sum(1 for r in result if r == 0)
+    return {"score": (wins + ties / 2) / (2 * n), "games": 2 * n,
+            "searched": stats[0], "changed": stats[1]}

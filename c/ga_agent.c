@@ -284,3 +284,115 @@ void ga_play_batch(const int *s1, const int *s2, const uint64_t *seeds, int num,
         }
     }
 }
+
+/* ── search: rollouts on top of a genome (policy/search.py) ──
+ * At a buy, the genome's choice competes with its next legal choices and buying nothing: each is
+ * played out `rollouts` times from a copy of the game (de_hide + de_resume_buy), both players
+ * following genomes (me_s for me, opp_s as the model of the opponent). The same hidden shuffle is
+ * used for every candidate of a rollout. The genome's choice is kept unless another candidate
+ * scores more than `margin` percent better. Not reentrant into itself: rollouts use plain agents. */
+typedef struct {
+    ga_agent self;
+    const int *opp_s;
+    int rollouts, top, margin;
+    uint64_t rng;
+    int searched, changed;
+    int imagine;      /* 1: the opponent's cards are unknown; model them as a mirror of mine */
+} ga_search;
+
+/* The opponent as a player can imagine it: a copy of my whole deck, with as many Provinces as
+ * they must own (8 - left - mine), shuffled, 5 in hand. Turns are known. */
+static void imagine_opponent(de_game *g, int me, uint64_t seed) {
+    de_player *o = &g->p[1 - me], *p = &g->p[me];
+    int cards[DE_ZONE], n = 0, mine = 0;
+    for (int z = 0; z < 4; z++) {
+        const int *a = z == 0 ? p->deck : z == 1 ? p->hand : z == 2 ? p->discard : p->play;
+        int an = z == 0 ? p->deck_n : z == 1 ? p->hand_n : z == 2 ? p->discard_n : p->play_n;
+        for (int i = 0; i < an && n < DE_ZONE; i++) {
+            if (a[i] == DE_PROVINCE) { mine++; continue; }
+            cards[n++] = a[i];
+        }
+    }
+    int start = g->nplayers == 2 ? 8 : 12;
+    int theirs = start - (g->supply[DE_PROVINCE] > 0 ? g->supply[DE_PROVINCE] : 0) - mine;
+    for (int i = 0; i < theirs && n < DE_ZONE; i++) cards[n++] = DE_PROVINCE;
+    uint64_t r = seed | 1;
+    for (int i = n - 1; i > 0; i--) {
+        int j = (int)(de_rng_next(&r) % (uint64_t)(i + 1));
+        int t = cards[i]; cards[i] = cards[j]; cards[j] = t;
+    }
+    int h = n < 5 ? n : 5;
+    memcpy(o->hand, cards, (size_t)h * sizeof(int));
+    o->hand_n = h;
+    memcpy(o->deck, cards + h, (size_t)(n - h) * sizeof(int));
+    o->deck_n = n - h;
+    o->discard_n = o->play_n = 0;
+}
+
+static int search_decide(void *ctx, const de_game *g, int kind, int me, int subject,
+                         const int *opts, int n, int may_pass) {
+    ga_search *s = ctx;
+    int pick = ga_decide(&s->self, g, kind, me, subject, opts, n, may_pass);
+    if (kind != DE_BUY || g->nplayers != 2) return pick;
+    int cand[8], nc = 0, own[DE_NUM_CARDS];
+    cand[nc++] = pick;
+    owned(&g->p[me], own);
+    const int *buy = s->self.s + GA_BUY + phase(&s->self, g, me) * GA_LIST;
+    for (int i = 0; i < GA_LIST && buy[i] != -1 && nc < s->top; i++) {
+        int c = buy[i], dup = 0;
+        if (c < 0 || !in(opts, n, c) || !allowed(&s->self, c, own)) continue;
+        for (int k = 0; k < nc; k++) dup |= cand[k] == c;
+        if (!dup) cand[nc++] = c;
+    }
+    int has_pass = 0;
+    for (int k = 0; k < nc; k++) has_pass |= cand[k] == -1;
+    if (!has_pass) cand[nc++] = -1;
+    if (nc == 1) return pick;
+    s->searched++;
+    double v[8] = {0};
+    for (int r = 0; r < s->rollouts; r++) {
+        uint64_t seed = de_rng_next(&s->rng);
+        for (int k = 0; k < nc; k++) {
+            de_game c = *g;
+            ga_agent ra[2];
+            ra[me] = (ga_agent){s->self.s, 0};
+            ra[1 - me] = (ga_agent){s->opp_s, 0};
+            de_agent rag[2] = {{ga_decide, &ra[0]}, {ga_decide, &ra[1]}};
+            if (s->imagine) imagine_opponent(&c, me, seed ^ 0x5bd1e995);
+            de_hide(&c, me, seed);
+            de_resume_buy(&c, rag, cand[k]);
+            int w = de_winners(&c);
+            v[k] += w == 3 ? 0.5 : (w >> me & 1) ? 1.0 : 0.0;
+        }
+    }
+    int best = 0;
+    for (int k = 1; k < nc; k++) if (v[k] > v[best]) best = k;
+    if (best && v[best] - v[0] > s->margin * s->rollouts / 100.0) { s->changed++; return cand[best]; }
+    return pick;
+}
+
+/* Search (genome s, opponent model opp_model) vs plain genome opp: each seed twice (search in
+ * seat 0, then seat 1). result[2*i+swap]: 1 win, 0 shared, -1 loss for the search side.
+ * stats: buys searched, buys changed. */
+void ga_search_batch(const int *s, const int *opp_model, const int *opp, const uint64_t *seeds,
+                     int num, const int *kingdom, int kn, int rollouts, int top, int margin,
+                     uint64_t search_seed, int imagine, int *result, int *stats) {
+    stats[0] = stats[1] = 0;
+    for (int i = 0; i < num; i++) {
+        for (int swap = 0; swap < 2; swap++) {
+            de_game g;
+            ga_search srch = {{s, 0}, opp_model, rollouts, top, margin,
+                              (search_seed ^ (seeds[i] * 0x9E3779B97F4A7C15ULL)) | 1, 0, 0, imagine};
+            ga_agent plain = {opp, 0};
+            de_agent agents[2];
+            agents[swap] = (de_agent){search_decide, &srch};
+            agents[1 - swap] = (de_agent){ga_decide, &plain};
+            de_init(&g, kingdom, kn, 2, seeds[i]);
+            de_run(&g, agents);
+            int mask = de_winners(&g);
+            result[2 * i + swap] = mask == 3 ? 0 : (mask >> swap & 1) ? 1 : -1;
+            stats[0] += srch.searched;
+            stats[1] += srch.changed;
+        }
+    }
+}
