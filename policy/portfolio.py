@@ -293,7 +293,7 @@ def main(argv=None) -> int:
                      () if a.all_cards else NO_REQUEST_YET)
         pct = lambda x: f"{100 * x:5.1f}%"
         print(f"{a.kingdoms} random Steam kingdoms x {a.seeds} seeds x 2 seats per bot"
-              f"{' (all cards)' if a.all_cards else ' (blocked cards never bought)'}")
+              f"{' (all cards)' if a.all_cards or not NO_REQUEST_YET else ' (blocked cards never bought)'}")
         print(f"portfolio (trial pick)  {pct(r['portfolio'])}\noracle (best member)    {pct(r['oracle'])}")
         for n, v in sorted(r["models"].items(), key=lambda x: -x[1]):
             print(f"model {n:<17} {pct(v)}")
