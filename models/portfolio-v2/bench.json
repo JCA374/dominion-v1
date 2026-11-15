@@ -1,0 +1,63 @@
+{
+ "bench_version": 3,
+ "model": "portfolio-v2",
+ "date": "2026-11-15",
+ "config": {
+  "kingdoms": 200,
+  "seeds": 20,
+  "seed": 1
+ },
+ "key_cards": {},
+ "score": 0.7620833333333333,
+ "random_score": 0.7620833333333333,
+ "opponents": {
+  "Big Money": {
+   "steam": {
+    "score": 0.877625,
+    "win": 0.86975,
+    "tie": 0.01575,
+    "games": 8000,
+    "kingdoms": 200
+   },
+   "eligible": {
+    "score": 0.877625,
+    "win": 0.86975,
+    "tie": 0.01575,
+    "games": 8000,
+    "kingdoms": 200
+   }
+  },
+  "Smithy-BM": {
+   "steam": {
+    "score": 0.75175,
+    "win": 0.740625,
+    "tie": 0.02225,
+    "games": 8000,
+    "kingdoms": 200
+   },
+   "eligible": {
+    "score": 0.75175,
+    "win": 0.740625,
+    "tie": 0.02225,
+    "games": 8000,
+    "kingdoms": 200
+   }
+  },
+  "Witch-BM": {
+   "steam": {
+    "score": 0.656875,
+    "win": 0.64475,
+    "tie": 0.02425,
+    "games": 8000,
+    "kingdoms": 200
+   },
+   "eligible": {
+    "score": 0.656875,
+    "win": 0.64475,
+    "tie": 0.02425,
+    "games": 8000,
+    "kingdoms": 200
+   }
+  }
+ }
+}

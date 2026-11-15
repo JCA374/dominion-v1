@@ -11,3 +11,5 @@ evolution_log.csv
 runs/
 runs.log
 runs-v2.log
+models/zz-*
+runs-v2big.log
