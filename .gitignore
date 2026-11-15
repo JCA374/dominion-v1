@@ -10,3 +10,4 @@ evolution_log.csv
 !models/*/buy_heatmap.png
 runs/
 runs.log
+runs-v2.log

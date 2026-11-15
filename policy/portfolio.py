@@ -230,6 +230,27 @@ def evaluate(manifest: dict, n_kingdoms: int = 100, n_seeds: int = 40, banned=NO
     return out
 
 
+def versus(a: dict, b: dict, n_kingdoms: int = 200, n_seeds: int = 20, seed: int = 13) -> dict:
+    """Head to head on n random Steam kingdoms: each portfolio picks its own member for the
+    kingdom (as in a real game), then the two play n_seeds games from each seat. Score of `a`
+    = (wins + ties/2) / games."""
+    from ga.c_bridge import evaluate_vs_opponent_c
+    from policy.bench import STEAM_BASE_SET, kingdom_seeds
+    rng = random.Random(seed)
+    sa, sb = members(a), members(b)
+    base = [rng.getrandbits(32) for _ in range(n_seeds)]
+    tot, rows = 0.0, []
+    for i in range(n_kingdoms):
+        k = sorted(rng.sample(STEAM_BASE_SET, 10))
+        pa = choose(a, k, strategies=sa)["member"]
+        pb = choose(b, k, strategies=sb)["member"]
+        r = evaluate_vs_opponent_c(sa[pa], kingdom_seeds(base, i), k, sb[pb])
+        score = r["win_rate"] + r["tie_rate"] / 2
+        tot += score
+        rows.append({"kingdom": k, "a": pa, "b": pb, "score": score})
+    return {"score": tot / n_kingdoms, "kingdoms": n_kingdoms, "seeds": n_seeds, "rows": rows}
+
+
 def main(argv=None) -> int:
     from policy.registry import read_manifest, resolve
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -245,6 +266,12 @@ def main(argv=None) -> int:
     e.add_argument("--seeds", type=int, default=40)
     e.add_argument("--all-cards", action="store_true", help="members may buy every card")
     e.add_argument("--json", metavar="FILE")
+    v = sub.add_parser("versus", help="head to head: A's pick vs B's pick on random kingdoms")
+    v.add_argument("a")
+    v.add_argument("b")
+    v.add_argument("--kingdoms", type=int, default=200)
+    v.add_argument("--seeds", type=int, default=20)
+    v.add_argument("--json", metavar="FILE")
     c = sub.add_parser("choose", help="which member plays this kingdom")
     c.add_argument("model")
     c.add_argument("kingdom", nargs="+")
@@ -252,6 +279,14 @@ def main(argv=None) -> int:
     if a.cmd == "build":
         dst = build(a.name, a.runs, a.description, a.force)
         print(f"built {a.name} -> {os.path.relpath(dst, ROOT)}")
+        return 0
+    if a.cmd == "versus":
+        r = versus(read_manifest(resolve(a.a)), read_manifest(resolve(a.b)), a.kingdoms, a.seeds)
+        print(f"{a.a} vs {a.b}: {100 * r['score']:.1f}% for {a.a} "
+              f"({a.kingdoms} random kingdoms x {a.seeds} seeds x 2 seats)")
+        if a.json:
+            with open(a.json, "w") as f:
+                json.dump(r, f, indent=1)
         return 0
     if a.cmd == "evaluate":
         r = evaluate(read_manifest(resolve(a.model)), a.kingdoms, a.seeds,
