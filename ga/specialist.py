@@ -30,7 +30,7 @@ import sys
 import time
 from copy import deepcopy
 from dataclasses import asdict
-from multiprocessing import Pool
+import multiprocessing as mp
 
 from core.cards import ACTION_CARDS, ALL_CARDS, BUYABLE_CARDS
 from core.strategy import (Strategy, big_money_strategy, engine_strategy, gardens_strategy,
@@ -138,7 +138,7 @@ def _score(args):
 def run(name: str, must: list[str], gens: int, pop_size: int, n_kingdoms: int, n_seeds: int,
         workers: int, seed: int, banned: set[str], val_every: int, val_kingdoms: int,
         tier2: int = 8, elites: int = 3, rate: float = 0.18, resume: bool = False,
-        hall: dict[str, Strategy] | None = None) -> dict:
+        hall: dict[str, Strategy] | None = None, snapshots: bool = False) -> dict:
     out = os.path.join(RUNS, name)
     os.makedirs(out, exist_ok=True)
     rng = random.Random(seed)
@@ -163,7 +163,7 @@ def run(name: str, must: list[str], gens: int, pop_size: int, n_kingdoms: int, n
                 "val_kingdoms_per_bot": val_kingdoms, "hall": sorted(hall or {}),
                 "started": time.strftime("%Y-%m-%d %H:%M")}
 
-    with Pool(workers) as pool:
+    with mp.get_context("fork").Pool(workers) as pool:
         for gen in range(1, gens + 1):
             plan = make_plan(must, n_kingdoms, n_seeds, rng, HALL)
             res = pool.map(_score, [(s, plan) for s in pop], chunksize=1)
@@ -188,6 +188,10 @@ def run(name: str, must: list[str], gens: int, pop_size: int, n_kingdoms: int, n
                         json.dump({"gen": gen, **vres[j]}, f, indent=1)
                 else:
                     stale += 1
+                if snapshots:
+                    os.makedirs(os.path.join(out, "snapshots"), exist_ok=True)
+                    with open(os.path.join(out, "snapshots", f"g{gen:05d}.json"), "w") as f:
+                        json.dump(asdict(best), f, indent=1)
                 history.append({"gen": gen, "val": round(val, 4), "best": round(best_val, 4),
                                 "bot_score": round(vres[j]["bot_score"], 4),
                                 "bots": {k: round(v, 4) for k, v in vres[j]["bots"].items()}})
@@ -244,6 +248,9 @@ def main(argv=None) -> int:
     ap.add_argument("--exclude-blocked", action="store_true",
                     help="never buy the cards the protocol can't play yet (policy/protocol.py)")
     ap.add_argument("--resume", action="store_true", help="seed with the run's current strategy.json")
+    ap.add_argument("--rate", type=float, default=0.18, help="mutation rate")
+    ap.add_argument("--snapshots", action="store_true",
+                    help="keep the best validated genome of every validation in runs/<name>/snapshots/")
     ap.add_argument("--hall", default="",
                     help="extra opponents: runs/<name> folders or strategy.json files, comma-separated "
                          "(played on kingdoms with the key cards; they count like a bot)")
@@ -259,7 +266,7 @@ def main(argv=None) -> int:
         hall[os.path.basename(os.path.normpath(h if not h.endswith(".json") else os.path.dirname(h)))] = \
             load_strategy(path)
     run(a.name, must, a.gens, a.pop, a.kingdoms, a.seeds, a.workers, a.seed, banned,
-        a.val_every, a.val_kingdoms, resume=a.resume, hall=hall)
+        a.val_every, a.val_kingdoms, rate=a.rate, resume=a.resume, hall=hall, snapshots=a.snapshots)
     return 0
 
 
